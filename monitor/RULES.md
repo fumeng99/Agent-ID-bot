@@ -65,7 +65,7 @@ contract-call calldata 编码示例：/workspace/work/baw/enc.mjs（@noble/hashe
 - 2026-10-30 17:13：BNAGENT 已按用户要求三号全部卖出，bnagent_stoploss_done，不再执行止损。
 - 2026-10-30 17:35 用户新指令：所有签名和资金操作（含 0 元 Mint）先让用户确认；巡逻任务只提醒不执行。Moribundus 单独授权除外。
 - 2026-10-30 17:36 更正：用户要求「0 元 Mint 全自动」——0 元免费 Mint 预演干净可直接 execute（主/001/002）；其他签名/资金操作先确认。
-- 2026-10-30 17:40 新增 003 账号 <acc003>.ai（BSC 0xf1477066F9e3f8aB6998Af0F7eE85fD178bFee79，目录 fumeng003），0 元 Mint 全自动同样适用；付费需指明账号。
+- 2026-10-30 17:40 新增 003 账号 <acc003>.ai（BSC <ACC003_ADDR>，目录 fumeng003），0 元 Mint 全自动同样适用；付费需指明账号。
 
 ## 链上发现（2026-10-30 借鉴 agentid-sniper）
 - 每轮先跑 `cd /workspace/work/launch-monitor/chainscan && SCAN_BUDGET=60 timeout 200 python3 scan.py`（增量扫上次以来的区块，最多 35 分钟；RPC 用 bsc.blockrazor.xyz，每次 getLogs ≤25 块）。
