@@ -1,0 +1,336 @@
+{
+  "version": "0.3-ecosystem-1",
+  "rules": [
+    {
+      "id": "agent-id",
+      "name": "Agent ID 资格",
+      "keywords": [
+        "agentic",
+        "agent id",
+        ".ai",
+        "币安代理"
+      ],
+      "questions": [
+        "目标是否要求 Binance Agentic Wallet 签发，还是只要求持有身份 NFT？",
+        "逐号核验 .ai 与钱包地址绑定、资格状态和使用次数；身份名字不等于操作权限。"
+      ],
+      "cases": [
+        "身份门槛 mint：按独立钱包核验 hasAgent、alreadyUsed、供应上限，value=0，预览后逐笔验 NFT ownerOf。"
+      ],
+      "source": "本机双账号铸造历史记录（已脱敏，不提供新目标参数）",
+      "historicalReport": {
+        "cases": [
+          "身份门槛 mint：按独立钱包核验 hasAgent、alreadyUsed、供应上限，value=0，预览后逐笔验 NFT ownerOf。"
+        ],
+        "source": "本机双账号铸造历史记录（已脱敏，不提供新目标参数）",
+        "verification": "历史阅读或操作记录；不是本轮复核结果，不继承合约、金额或当前状态。"
+      }
+    },
+    {
+      "id": "direct-mint",
+      "name": "直接铸造 NFT",
+      "keywords": [
+        "mint",
+        "铸造",
+        "nft",
+        "erc721",
+        "erc1155"
+      ],
+      "questions": [
+        "目标合约、链、函数签名、数量单位和本轮价格分别是什么？",
+        "免费是否仅免 mint 本金，是否还有 gas、预言机费、资格资产费用？",
+        "每号数量限制、已铸数量、开放时间和售罄状态是否可读验证？",
+        "只有帖子或合约时，能否从已匹配源码与 ABI 验证 mint？缺活动网页不等于缺代码依据，项目来源另行核实。",
+        "源码 public 变量或 mapping 是否生成所需 getter？精确 ABI 类型、报价是否为本次数量总价，不能凭 mint(1) 猜参数类型。",
+        "NFT 接收者与 BNB 费用收款方是否分开核验？NFT 给 msg.sender、费用转给 CREATOR 本身不是接收者不符；外部调用需另查可达路径与失败处理。",
+        "当前证据属于分析、模拟、提交还是到账？只有目标 receipt、铸造事件和归属/余额核验才能确认收到目标 NFT。"
+      ],
+      "cases": [
+        "BibiAI：首张资格与后续动态报价分开；mintOpen 与 mintEnded 同时核对。",
+        "AgentPunk：mint() 每次一张，quote(address) 查询下一张价格。"
+      ],
+      "source": "https://bibiai.fun/llms.txt ; https://agentpunk.fun/llms.txt",
+      "maturity": "本机已保存官方指南及只读状态，非新目标自动执行保证",
+      "historicalReport": {
+        "cases": [
+          "SuperChip：区分铸造与后续激活/质押。",
+          "ShieldedNaka：免费前置 NFT 不等于主系列铸造完成。"
+        ],
+        "source": "https://x.com/i/status/2108274847759700030",
+        "verification": "历史阅读或操作记录；不是本轮复核结果，不继承合约、金额或当前状态。"
+      }
+    },
+    {
+      "id": "allowlist",
+      "name": "白名单 / 签名 / 领取",
+      "keywords": [
+        "whitelist",
+        "allowlist",
+        "merkle",
+        "proof",
+        "signature",
+        "白名单",
+        "claim",
+        "领取"
+      ],
+      "questions": [
+        "资格是地址名单、Merkle proof、后端签名还是持有检查？",
+        "proof/签名从哪个官方入口取得？过期时间、chainId、接收钱包是否绑定？",
+        "申请、抽签入选与实际 claim 不可合并为一步。"
+      ],
+      "cases": [],
+      "source": "通用待核验问题框架；暂无本项目独立验证的白名单流程案例",
+      "maturity": "framework",
+      "historicalReport": {
+        "cases": [
+          "Identity Units：Genesis 资格与后续 raffle 分开。",
+          "Traceforms：钱包评分是筛选，不保证白名单。"
+        ],
+        "source": "https://x.com/i/status/2107108177942811020",
+        "verification": "历史阅读或操作记录；不是本轮复核结果，不继承合约、金额或当前状态。"
+      }
+    },
+    {
+      "id": "paid-mint",
+      "name": "付费 / 授权",
+      "keywords": [
+        "usdt",
+        "approve",
+        "allowance",
+        "price",
+        "cost",
+        "付费",
+        "价格",
+        "bnb"
+      ],
+      "questions": [
+        "支付原生币还是 ERC20？数额单位与 decimals 是否明确？",
+        "如果需要 approve，spender 是否为本项目当前执行合约，额度是否限本次所需？",
+        "本金、gas、协议费、授权交易和可退款项分别列出。"
+      ],
+      "cases": [
+        "PTAH：历史 Relic 铸造为 ERC20 支付；核对 decimals、spender、本次数量总价，当前销售状态另查。"
+      ],
+      "source": "https://ptah.trade/llms.txt",
+      "historicalReport": {
+        "cases": [
+          "PTAH：挂单资金与目标 NFT 分开，ERC20 定额授权，再核验挂单与退款。"
+        ],
+        "source": "https://ptah.trade/whitepaper",
+        "verification": "历史阅读或操作记录；不是本轮复核结果，不继承合约、金额或当前状态。"
+      }
+    },
+    {
+      "id": "craft",
+      "name": "合成 / 质押 / 产出",
+      "keywords": [
+        "craft",
+        "weave",
+        "stake",
+        "mining",
+        "合成",
+        "挖矿",
+        "质押",
+        "relic",
+        "loom"
+      ],
+      "questions": [
+        "消耗什么资产、数量和 tokenId？得到什么资产与权重？",
+        "mint、合成、激活、claim 的合约和阶段分别核实。",
+        "奖励是否只是账面 claimable，真正到账须核验 Transfer 和余额。"
+      ],
+      "cases": [
+        "PTAH：Relic、Loom、合成输入及奖励领取分别核对。"
+      ],
+      "source": "https://ptah.trade/llms.txt",
+      "historicalReport": {
+        "cases": [
+          "PTAH：Relic、Loom、挖矿权重、待领奖励分别核对。",
+          "Slabs：支付资产、配方、孵化结果分别核实。"
+        ],
+        "source": "https://ptah.trade/whitepaper",
+        "verification": "历史阅读或操作记录；不是本轮复核结果，不继承合约、金额或当前状态。"
+      }
+    },
+    {
+      "id": "launchpad",
+      "name": "发射台买入",
+      "keywords": [
+        "four.meme",
+        "flap",
+        "gang.fun",
+        "bonding",
+        "发射",
+        "内盘"
+      ],
+      "questions": [
+        "这是代币购买还是 NFT mint？核对平台版本、发行模板与目标 CA。",
+        "当前路由是否支持买入及卖出？资格、每钱包限额和转账限制需单独核实。",
+        "API 发现时间不等于链上创建顺序；成交回报不等于完成验链。"
+      ],
+      "cases": [
+        "CA 买卖历史工具记录：CA 即时买卖已有历史工具回执；模板监听到下单的连接未完成。"
+      ],
+      "source": "https://four.meme",
+      "historicalReport": {
+        "cases": [
+          "CA 买卖历史工具记录：CA 即时买卖已有历史工具回执；模板监听到下单的连接未完成。"
+        ],
+        "source": "https://four.meme",
+        "verification": "历史阅读或操作记录；不是本轮复核结果，不继承合约、金额或当前状态。"
+      }
+    },
+    {
+      "id": "identity-quota",
+      "name": "身份与钱包额度",
+      "keywords": [
+        "handleof",
+        "ownerof",
+        "mintedby",
+        "handleclaimed",
+        "身份额度",
+        "每身份"
+      ],
+      "questions": [
+        "身份是余额、tokenId 所有权还是 handle？绑定的注册表是否为本项目部署配置？",
+        "免费次数、付费次数按钱包或身份分别记账；不能靠切换钱包推定额度重置。"
+      ],
+      "maturity": "observed",
+      "scope": "研究问题；不声明执行支持"
+    },
+    {
+      "id": "quantity-bonus",
+      "name": "参数语义与附赠资产",
+      "keywords": [
+        "getsfree",
+        "paidcount",
+        "bonus",
+        "赠品",
+        "附赠",
+        "付费数量"
+      ],
+      "questions": [
+        "输入量、付费量和最终到账量分别是什么？赠品是否占供应和限额？",
+        "多个产物逐个核对合约、事件和数量，不把一笔交易成功等同全部资产到账。"
+      ],
+      "maturity": "observed",
+      "scope": "研究问题；不声明执行支持"
+    },
+    {
+      "id": "oracle-randomness",
+      "name": "动态报价与异步随机性",
+      "keywords": [
+        "chainlink",
+        "vrf",
+        "oracle",
+        "latestRoundData",
+        "预言机",
+        "随机"
+      ],
+      "questions": [
+        "美元报价的时效、精度、舍入是否核实？免费本金是否仍有随机性/服务费用？",
+        "请求、回调、产物、退款分别如何查状态？等待回调时不重复发送。"
+      ],
+      "maturity": "observed",
+      "scope": "研究问题；不声明执行支持"
+    },
+    {
+      "id": "pow-mint",
+      "name": "PoW铸造",
+      "keywords": [
+        "proof-of-work",
+        "expectedprevwork",
+        "anchorblock",
+        "workhash",
+        "工作量证明"
+      ],
+      "questions": [
+        "工作量证明是否绑定链、合约、钱包及当前锚定块/轮次？竞争后旧证明是否失效？",
+        "计算、付费铸造、销毁领取分别核价，不能套普通 mint(quantity)。"
+      ],
+      "maturity": "observed",
+      "scope": "研究问题；不声明执行支持"
+    },
+    {
+      "id": "refundable-sale",
+      "name": "募资与退款",
+      "keywords": [
+        "refundof",
+        "refundopen",
+        "teamdrawn",
+        "退款",
+        "refund"
+      ],
+      "questions": [
+        "是否达到售罄/开池/超时条件？退款由谁触发、退给谁、是否按比例扣款？",
+        "旧部署退款与新部署销售分别核验，报价返回0可能表示不可买而非免费。"
+      ],
+      "maturity": "observed",
+      "scope": "研究问题；不声明执行支持"
+    },
+    {
+      "id": "signature-settlement",
+      "name": "签名支付与中继结算",
+      "keywords": [
+        "x402",
+        "eip-3009",
+        "transferwithauthorization",
+        "签名支付",
+        "settlestranded"
+      ],
+      "questions": [
+        "签名域、chainId、接收合约、额度、nonce、有效期和中继是否绑定本次操作？",
+        "付款、签名消耗、逐订单结算和到账分开核验；批次成功不证明每一项成功。"
+      ],
+      "maturity": "observed",
+      "scope": "研究问题；不声明执行支持"
+    },
+    {
+      "id": "lifecycle",
+      "name": "多阶段资产消耗",
+      "keywords": [
+        "burnforpower",
+        "burnreward",
+        "fusion",
+        "fuse",
+        "激活",
+        "销毁",
+        "合成",
+        "harvest"
+      ],
+      "questions": [
+        "持有、激活、合成、销毁、领取属于哪一活动和部署版本？各自消耗及产物分别是什么？",
+        "前置成功不授权后续操作；不可逆销毁、异步等待及退款缺口需要单独说明。"
+      ],
+      "maturity": "observed",
+      "scope": "研究问题；不声明执行支持"
+    },
+    {
+      "id": "token-claim",
+      "name": "代币领取与铸造",
+      "keywords": [
+        "claimfreebyid",
+        "quotemint",
+        "bep-20",
+        "erc20 mint",
+        "代币领取",
+        "铸币"
+      ],
+      "questions": [
+        "产物是ERC20而非NFT吗？输入是整数枚还是最小单位，到账用哪种事件和余额核验？",
+        "免费claim与付费mint的资格、窗口和总量分别检查，不自动从一条入口切到另一条。"
+      ],
+      "maturity": "observed",
+      "scope": "研究问题；不声明执行支持"
+    }
+  ],
+  "never_inherit": [
+    "旧案例的合约地址",
+    "函数选择器与参数",
+    "链与钱包",
+    "价格与数量",
+    "当前开放状态",
+    "资格与退款承诺"
+  ],
+  "maturity": "研究顺序与问题框架来自脱敏机制记录与公开生态历史研究案例；不同项目逐项取证，未做跨项目自动执行认证。"
+}

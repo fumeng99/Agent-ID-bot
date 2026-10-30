@@ -140,3 +140,13 @@ contract-call calldata 编码示例：/workspace/work/baw/enc.mjs（@noble/hashe
 
 ## GitHub 同步（2026-10-30）
 - 私有仓库 fumeng99/Agent-ID-bot（Hark GitHub 已授权）。本地克隆 /workspace/work/Agent-ID-bot。同步时只放脚本和 RULES，替换掉钱包地址和 .ai 名，不放 state/seen/二维码/会话/instance_id。
+- 2026-10-30 20:20 用户授权「全自动优化更新」：任何运行改了 RULES.md 或巡逻脚本后，立刻运行 `bash /workspace/work/launch-monitor/sync_github.sh "<改了什么>"`（shell 带 credentials github）同步到私有仓库；每天 09:00 任务会更新技能、按前一天巡逻记录修脚本并同步。优化不得放宽安全边界。
+
+## EZbot 第二批（2026-10-30 20:25 用户问「全部学习了吗」后补学）
+- 每轮运行 `python3 /workspace/work/launch-monitor/watch_sites.py`：盯 EZbot 案例库里 20+ 个 Agent ID 项目官网（ptah、bibiai、agentpunk、stockerpunk、anthrobit、build-100、bncworld、hashdroids、agentidlive 等）的 llms.txt/skill.md/agent.md，内容一变就报新合约（项目常在同站开新系列）。新站加进 watch_sites.txt。新合约走正常核验流程。
+- 核验清单参考 mint-patterns.json（14 类：Agent ID 资格、直接铸造、白名单/签名、付费/授权、合成、launchpad、身份配额、数量奖励、随机数、PoW、可退款、签名结算、生命周期、代币领取）。要点：
+  - 身份门槛 mint 逐号核 hasAgent / alreadyUsed / 供应上限；免费只免本金，也要看预言机费、资格资产费。
+  - 「免费前置 NFT」不等于主系列完成；首张免费和后续动态报价分开（如 BibiAI、AgentPunk 的 quote(address)）。
+  - 只有 receipt + 铸造事件 + ownerOf/余额核验才算到账，preview/提交成功不算。
+  - 永不继承旧案例的：合约地址、函数选择器与参数、链与钱包、价格与数量、开放状态、资格与退款承诺。
+- signals.ezbot.vip 需要登录，不用。

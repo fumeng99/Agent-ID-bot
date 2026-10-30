@@ -9,3 +9,4 @@ accounts/
 node_modules/
 __pycache__/
 .env
+watch_state.json
