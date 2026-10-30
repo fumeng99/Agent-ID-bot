@@ -11,7 +11,8 @@
 import json, os, sys, time, urllib.request, hashlib
 D = os.path.dirname(os.path.abspath(__file__))
 SD = os.path.join(os.environ['AIDBOT_DATA'], 'chainscan') if os.environ.get('AIDBOT_DATA') else D; os.makedirs(SD, exist_ok=True); STATE = os.path.join(SD, 'state.json'); OUT = os.path.join(SD, 'candidates.json')
-RPCS = ['https://bsc.blockrazor.xyz', 'https://bsc-dataseed.bnbchain.org', 'https://bsc-dataseed1.defibit.io']
+RPCS = ['https://bsc.blockrazor.xyz', 'https://bsc-dataseed.bnbchain.org', 'https://bsc-dataseed1.defibit.io', 'https://bsc-rpc.publicnode.com', 'https://bsc.drpc.org', 'https://1rpc.io/bnb', 'https://bsc.blockpi.network/v1/rpc/public']
+BAD = {}  # 节点冷却：限流/报错后 120 秒内跳过（照  v2.3.1）
 LOG_RANGE = 25
 REGISTRY = '60b9262456de011f7d15a54cdd8c48baaa8b022f'
 T_TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
@@ -29,14 +30,17 @@ def rpc(m, p, tries=2):
     last = None
     for i in range(tries):
         for u in RPCS:
+            if BAD.get(u, 0) > time.time(): continue
             try:
                 r = urllib.request.Request(u, json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': m, 'params': p}).encode(),
                                            {'content-type': 'application/json', 'user-agent': 'Mozilla/5.0'})
                 j = json.load(urllib.request.urlopen(r, timeout=8))
                 if 'result' in j: return j['result']
                 last = j.get('error')
-            except Exception as e: last = str(e)
-        time.sleep(0.3)
+                if m == 'eth_getLogs' or 'limit' in str(last).lower(): BAD[u] = time.time() + 120
+            except Exception as e: last = str(e); BAD[u] = time.time() + 120
+        time.sleep(0.3 if i == 0 else 2)
+        if all(BAD.get(u, 0) > time.time() for u in RPCS): BAD.clear()
     raise RuntimeError(f'{m} failed: {last}')
 call = lambda to, data: rpc('eth_call', [{'to': to, 'data': data}, 'latest'])
 def code(a):

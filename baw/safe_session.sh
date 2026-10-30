@@ -45,6 +45,6 @@ case "$cmd" in
   HOME=$h timeout 40 "$BAW" wallet agent-id --json 2>&1 | tr -d '\n ' | head -c 300; echo
   [ "$(status "$acc")" = CONNECTED ] && { cp -p "$h/.baw/session.json" "$h/.baw/session.json.good"; rm -f "$LM/so_$acc.json"; } ;;
  backup)
-  for a in main acc001 acc002 acc003; do [ "$(status $a)" = CONNECTED ] && cp -p "$(home $a)/.baw/session.json" "$(home $a)/.baw/session.json.good" && echo "$a backed up"; done ;;
+  for a in main acc001 acc002 acc003 acc004; do [ "$(status $a)" = CONNECTED ] && cp -p "$(home $a)/.baw/session.json" "$(home $a)/.baw/session.json.good" && echo "$a backed up"; done ;;
  *) echo "usage: $0 check|signin|verify <acc> | backup"; exit 2 ;;
 esac
