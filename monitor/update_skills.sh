@@ -5,9 +5,9 @@ set -u; out=""; W=${AIDBOT_HOME:-$HOME/.agent-id-bot}; MAIN=${AIDBOT_MAIN_ACCOUN
 S=$W/clawby/clawby-data; base=https://www.openclawby.com/clawby-skill
 curl -s $base/manifest.json -o /tmp/cm.json && rv=$(python3 -c "import json;print(json.load(open('/tmp/cm.json'))['version'])") || rv=""
 lv=$([ -f $S/manifest.json ] && python3 -c "import json;print(json.load(open('$S/manifest.json'))['version'])")
-[ -f "$S/manifest.json" ] || rv=""
+[ -f "$S/manifest.json" ] || { lv="未安装"; mkdir -p $S; }
 if [ -n "$rv" ] && [ "$rv" != "$lv" ]; then
-  tar czf /tmp/clawby_backup_$lv.tgz -C $W/clawby clawby-data
+  [ "$lv" != "未安装" ] && tar czf /tmp/clawby_backup_$lv.tgz -C $W/clawby clawby-data
   for f in $(python3 -c "import json;print(' '.join(json.load(open('/tmp/cm.json'))['managed']))"); do curl -s --create-dirs "$base/$f" -o "$S/$f"; done
   cp /tmp/cm.json $S/manifest.json; out="$out Clawby $lv→$rv;"
 elif [ -f $S/manifest.json ]; then touch $S/manifest.json; fi
