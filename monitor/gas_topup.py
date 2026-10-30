@@ -11,17 +11,16 @@ RPC = os.environ.get('AIDBOT_RPC', 'https://bsc-rpc.publicnode.com')
 USDT = '0x55d398326f99059fF775485246999027B3197955'; NATIVE = '0x' + 'e' * 40
 MIN_BNB = float(os.environ.get('GAS_MIN_BNB', 0.003)); AMT = float(os.environ.get('GAS_TOPUP_USDT', 6)); MAX_DAY = int(os.environ.get('GAS_MAX_PER_DAY', 2))
 DRY = '--dry' in sys.argv
-def rpc(m, p):
-    q = json.dumps({"jsonrpc": "2.0", "id": 1, "method": m, "params": p}).encode()
-    return json.load(urllib.request.urlopen(urllib.request.Request(RPC, q, {'content-type': 'application/json', 'User-Agent': 'Mozilla/5.0'}), timeout=15))['result']
+sys.path.insert(0, here); from rpcpool import batch
 accs = [l.split(' ', 2) for l in subprocess.run([sys.executable, os.path.join(here, 'accounts.py'), '--auto'], capture_output=True, text=True).stdout.splitlines() if l.strip()]
 led = json.load(open(LED)) if os.path.exists(LED) else {}
 day = time.strftime('%Y-%m-%d', time.gmtime(time.time() + 8 * 3600))
-for d, label, addr in accs:
-    try:
-        bnb = int(rpc('eth_getBalance', [addr, 'latest']), 16) / 1e18
-        usdt = int(rpc('eth_call', [{'to': USDT, 'data': '0x70a08231' + addr[2:].lower().rjust(64, '0')}, 'latest']), 16) / 1e18
-    except Exception as e: print(label, '查询失败', e); continue
+# 一次批量查完所有账号的 BNB 和 USDT，节点轮换防 429
+try: R = batch([c for _, _, a in accs for c in (('eth_getBalance', [a, 'latest']), ('eth_call', [{'to': USDT, 'data': '0x70a08231' + a[2:].lower().rjust(64, '0')}, 'latest']))])
+except Exception as e: R = None; print('余额查询失败（所有节点）：', e)
+for i, (d, label, addr) in enumerate(accs):
+    if R is None: print(label, '余额未查到'); continue
+    bnb = int(R[2 * i], 16) / 1e18; usdt = int(R[2 * i + 1], 16) / 1e18
     n = len([x for x in led.get(label, []) if x['day'] == day])
     if bnb >= MIN_BNB: print(label, f'BNB {bnb:.4f} 够用'); continue
     if usdt < AMT: print(label, f'BNB {bnb:.5f} 不足且 USDT 只有 {usdt:.2f}，需用户充值'); continue

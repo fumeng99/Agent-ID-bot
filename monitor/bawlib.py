@@ -10,8 +10,9 @@ def accounts(flag='--auto'):
     return [dict(zip(('dir', 'label', 'address'), l.split(' ', 2))) for l in out.splitlines() if l.strip()]
 def env(a): return dict(os.environ, HOME=os.path.join(H, 'baw', 'accounts', a['dir']))
 def rpc(m, p):
-    q = json.dumps({"jsonrpc": "2.0", "id": 1, "method": m, "params": p}).encode()
-    return json.load(urllib.request.urlopen(urllib.request.Request(RPC, q, {'content-type': 'application/json', 'User-Agent': 'Mozilla/5.0'}), timeout=20)).get('result')
+    # 11 个公共节点轮换，429/5xx 自动换节点（rpcpool.py）
+    from rpcpool import rpc as _r
+    return _r(m, p)
 def call(to, data): return int(rpc('eth_call', [{'to': to, 'data': data}, 'latest']), 16)
 def bal721(c, addr): return call(c, '0x70a08231' + addr[2:].lower().rjust(64, '0'))
 def baw(a, *args):

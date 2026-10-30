@@ -196,3 +196,4 @@ contract-call calldata 编码示例：$AIDBOT_HOME/baw/enc.mjs（@noble/hashes k
 - 新发现即简报（不等 60%）：项目名/官网（读 token() 的 name，web_search 合约地址找官网）、单价（按 U）、进度、开池条件、是否已开池、renounced/paused 权限、风险结论。已开池或开池后跌幅大的标明「已开池，不建议追」。
 - 09:00–24:00 只投研；00:00–09:00 仍按「夜间自动付费进场与止盈止损」处理。
 - 面试/签名型（如 Agent Shift）：读站点 agent-guide.md / mint-api/agent，按文档用 baw sign-message preview→execute 做 EIP-712 登录与激活（只签 EIP-712，不签 personal_sign/permit/approve），独立解题，拿到 verifier 授权后 mint 仍须 value=0 预演干净才 execute；遇 X 任务/验证码等人工步骤立即单独通知用户。
+- 2026-10-31 RPC 429 根治：rpcpool.py（11 个公共节点轮换、429/5xx 自动换节点并冷却 60 秒、批量请求一次查完所有账号）；gas_topup.py 已改用。其他脚本查余额也优先 from rpcpool import rpc, batch。
