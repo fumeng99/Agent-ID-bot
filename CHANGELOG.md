@@ -1,5 +1,6 @@
 # 更新日志
 ## 2026-10-30
+- 新增 `monitor/bawlib.py`（共用预演/执行/干净判定）、`monitor/phase_mint.py`（定时开放抢铸，通用版）、`monitor/backfill.py`（新号补领，含签名/证明的自动排除）。
 - 新增 `monitor/gas_topup.py`：BNB 不足时自动用 USDT 换 BNB（阈值、金额、每日次数可配）。
 - 补上 `monitor/riskcheck.py`（权限 + 貔貅模拟），上次提交说明里写了但漏推。
 - AGENTS.md 加自动补 gas、解题/签名型免费 Mint 自动尝试与通知规则、风险检查用法。

@@ -106,3 +106,7 @@
 
 ## 合约风险检查
 - 付费项目买前跑 `python3 monitor/riskcheck.py <token>`：查可增发/暂停/黑名单/改税权限，并模拟转入 Pancake 池测貔貅。selector 检测是启发式，不等于完整审计。
+
+## 定时开放抢铸 / 新号补领
+- 分阶段、限时开放的免费 Mint：查到开放时间后单独建一次性定时任务，在开放前 3 分钟跑 `python3 monitor/phase_mint.py --contract <合约> --data <freeMint calldata> --at <unix秒>`（或 `--at-selector` 从合约读）。
+- 新号登录后跑 `python3 monitor/backfill.py --dry` 看能补领哪些，再去掉 `--dry` 执行；含签名/Merkle proof 的会列为「人工」，走官网流程。
