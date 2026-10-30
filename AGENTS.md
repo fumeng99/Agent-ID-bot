@@ -110,3 +110,5 @@
 ## 定时开放抢铸 / 新号补领
 - 分阶段、限时开放的免费 Mint：查到开放时间后单独建一次性定时任务，在开放前 3 分钟跑 `python3 monitor/phase_mint.py --contract <合约> --data <freeMint calldata> --at <unix秒>`（或 `--at-selector` 从合约读）。
 - 新号登录后跑 `python3 monitor/backfill.py --dry` 看能补领哪些，再去掉 `--dry` 执行；含签名/Merkle proof 的会列为「人工」，走官网流程。
+
+- 面试/签名型免费 Mint（如 Agent Shift）：读站点 agent-guide.md / mint-api/agent，按文档用 `baw sign-message preview`→execute 做 EIP-712 登录与激活（只签 EIP-712，不签 personal_sign/permit/approve），独立解题，拿 verifier 授权后 mint 仍须 value=0 预演干净才 execute；遇 X 任务/验证码等人工步骤立即单独通知用户。

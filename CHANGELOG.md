@@ -10,3 +10,7 @@
 - AGENTS.md 加决策三档、付费项目权限/貔貅/资金去向检查、执行前复查报价。
 - 新增项目官网指南监控、mint 机制核验清单、Four.meme/Gang 内盘、TG 频道、技能自动更新。
 - 2026-10-31：新增 `monitor/fairmint/fairmint.py`（按 Minted 事件全链发现 Jager/AGI 类付费分档 fair mint）；`scan.py` 修复把预建空池误判为已开池（现需储备>0）；`watch_sites.py` 读取 `/deployment.json`。
+
+## 2026-10-31
+- watch_sites：除指南文件外，再抓首页、脚本及一层 import（config.mjs 等）里的合约地址，修复合约藏在配置文件里漏报（Agent Shift 案例）。
+- AGENTS.md 补面试/签名型免费 Mint 流程。

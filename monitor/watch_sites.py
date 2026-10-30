@@ -17,6 +17,27 @@ def grab(site):
             t = r.read(200000).decode('utf8', 'ignore')
             if not t.lstrip().lower().startswith(('<!doctype', '<html', '{"error')): out[p] = t
         except Exception: pass
+    # 首页 + 脚本 + 一层 import（合约常藏在 config.mjs / app.js）：只按地址集合比对
+    try:
+        def get(u):
+            return urllib.request.urlopen(urllib.request.Request(u, headers={'user-agent': 'Mozilla/5.0'}), timeout=10).read(600000).decode('utf8', 'ignore')
+        base = 'https://' + site; home = get(base + '/'); seen = set(); cas = set(re.findall(r'0x[0-9a-fA-F]{40}', home))
+        q = [u for u in re.findall(r'<script[^>]+src=["\']([^"\']+)', home) if 'vendor' not in u and 'ethers' not in u]
+        for _ in range(2):
+            nq = []
+            for u in q[:12]:
+                if u.startswith('//'): u = 'https:' + u
+                elif not u.startswith('http'): u = base + '/' + u.lstrip('./')
+                if u in seen or not u.startswith(base): continue
+                seen.add(u)
+                try: t = get(u)
+                except Exception: continue
+                cas |= set(re.findall(r'0x[0-9a-fA-F]{40}', t))
+                nq += [m for m in re.findall(r'(?:from|import)\s*\(?\s*["\']([^"\']+\.m?js)', t) if 'ethers' not in m]
+            q = nq
+        cas = sorted(set(a.lower() for a in cas))
+        if cas: out['/_js'] = '\n'.join(cas) + '\n' + ('free' if re.search(r'free|免费', home, re.I) else '')
+    except Exception: pass
     return site, out
 st = json.load(open(ST)) if os.path.exists(ST) else {}
 first = not st; changes = []
