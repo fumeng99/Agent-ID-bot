@@ -5,6 +5,12 @@ CLI：$AIDBOT_HOME/baw/node_modules/.bin/baw，运行前 export HOME=$AIDBOT_HOM
 Binance 官方技能文档：$AIDBOT_HOME/binance-skills-hub/skills/binance-web3/（binance-agentic-wallet、query-token-audit、query-token-info、meme-rush 等）
 contract-call calldata 编码示例：$AIDBOT_HOME/baw/enc.mjs（@noble/hashes keccak）
 
+## 持仓开盘提醒（每轮必做，2026-10-31 02:54 用户原话「打了的东西有开盘也要立马通知我」）
+- 每轮第 1 步之后立刻运行 `python3 $AIDBOT_DATA/opencheck.py`。它检查 seen.json 里我们打过/持有的项目代币（token 字段 > 合约 token() > 合约本身），五号合计有持仓且 DEX 上已有流动性 ≥ 50 美元的池子就输出到 new_open，并自动记 open_alerted:true（每个项目只提醒一次）。
+- new_open 非空时，巡逻消息第一行就写「🔔开盘：项目名」，再写：DEX、现价（美元）、流动性、各账号持仓数量、合计价值（U）、Dexscreener 链接（url 字段）；并跑 `python3 riskcheck.py <token> <持仓地址>` 写貔貅/权限结论。结尾写「需要卖请回复：确认卖出 + 项目 + 账号」（夜间自动买入的仓位仍按止盈止损规则处理）。
+- 打免费项目时若官网配置里另有代币合约（如 SAFU 的 token），把代币地址写进 seen.json 该项目的 token 字段，opencheck 才能盯到。
+- 2026-10-31 02:56 基线：JAGENT、BNAGENT 已开盘、已知，已记 open_alerted；Printer Ai 只有 0.03 美元空池，不算开盘。
+
 ## 1. 0 元免费 Mint（自动执行，用户已长期授权）
 - 核实 mint 价格严格为 0（交易 value=0，不付 USDT/BNB，仅正常 gas）。不做 approve/permit/setApprovalForAll，不签任何授权型 EIP-712（Permit 等）。登录/挑战类 EIP-712（SignIn、StartAuthorization）可签。
 - 必须先 `baw contract-call preview`：simulationCode 000000000、balanceChanges 只有 +NFT 和 gas、无 allowanceChanges/authorityChanges、risks 为空，才 `contract-call execute`。
