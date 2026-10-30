@@ -4,11 +4,11 @@
 #       safe_session.sh signin <dir>    -> 仅在确认失效且无未过期配对码时：备份会话后生成新配对码+二维码
 #       safe_session.sh verify <dir>    -> 用户扫码后完成登录并核对 agentId
 #       safe_session.sh backup          -> 备份所有 CONNECTED 账号的 session.json
-# <dir> = fumeng | fumeng001 | fumeng002 | fumeng003
+# <dir> = $AIDBOT_HOME/baw/accounts/ 下的账号目录名（每个账号一个 HOME，内含固定 instance_id）
 set -u
-BASE=/workspace/work/baw
+BASE=${AIDBOT_HOME:-$HOME/.agent-id-bot}/baw
 BAW=$BASE/node_modules/.bin/baw
-LM=/workspace/work/launch-monitor
+LM=${AIDBOT_DATA:-$HOME/.agent-id-bot/data}
 LOCK=$BASE/.session.lock
 cmd=${1:-}; acc=${2:-}
 home() { echo "$BASE/accounts/$1"; }
@@ -45,6 +45,6 @@ case "$cmd" in
   HOME=$h timeout 40 "$BAW" wallet agent-id --json 2>&1 | tr -d '\n ' | head -c 300; echo
   [ "$(status "$acc")" = CONNECTED ] && { cp -p "$h/.baw/session.json" "$h/.baw/session.json.good"; rm -f "$LM/so_$acc.json"; } ;;
  backup)
-  for a in fumeng fumeng001 fumeng002 fumeng003; do [ "$(status $a)" = CONNECTED ] && cp -p "$(home $a)/.baw/session.json" "$(home $a)/.baw/session.json.good" && echo "$a backed up"; done ;;
+  for a in main acc001 acc002 acc003; do [ "$(status $a)" = CONNECTED ] && cp -p "$(home $a)/.baw/session.json" "$(home $a)/.baw/session.json.good" && echo "$a backed up"; done ;;
  *) echo "usage: $0 check|signin|verify <acc> | backup"; exit 2 ;;
 esac
