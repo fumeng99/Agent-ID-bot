@@ -150,3 +150,6 @@ contract-call calldata 编码示例：$AIDBOT_HOME/baw/enc.mjs（@noble/hashes k
   - 只有 receipt + 铸造事件 + ownerOf/余额核验才算到账，preview/提交成功不算。
   - 永不继承旧案例的：合约地址、函数选择器与参数、链与钱包、价格与数量、开放状态、资格与退款承诺。
 - signals.ezbot.vip 需要登录，不用。
+
+## EZbot 签名目录（2026-10-30 20:40 接入）
+- 每轮运行 `$AIDBOT_DATA/feed/ezbot_feed.sh`（JSON）：overview/outbox 里是新项目卡（含未初筛、低优先级）。免费的走正常核验 + preview；付费只投研。快报里转述时保留来源（作者 @0xquqi，https://ezbot.vip/signals）。消息发出后运行 `ezbot_feed.sh --ack <逗号分隔 delivery_id>`；本轮没发出就不 ack。

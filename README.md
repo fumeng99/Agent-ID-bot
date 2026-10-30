@@ -22,7 +22,7 @@
 
 ## 快速开始
 1. 看 [`docs/SETUP.md`](docs/SETUP.md) 装 baw、建账号目录、复制 `config/config.example.json`。
-2. 让你的 Agent 读 [`AGENTS.md`](AGENTS.md)（Claude Code 自动读 `CLAUDE.md`；支持 skill 的工具装 `skills/agent-id-bot/`）。
+2. 让你的 Agent 读 [`AGENTS.md`](AGENTS.md)（Claude Code 自动读 `CLAUDE.md`；支持 skill 的工具已自动发现 `.claude/skills/`、`.agents/skills/`，其他平台复制 `skills/agent-id-bot/`）。
 3. 用你的平台的定时功能（cron、Claude Code `/loop`、Codex 自动化、OpenClaw heartbeat 等）每 10 分钟让 Agent 跑一轮「巡逻」。
 
 ## 环境变量
