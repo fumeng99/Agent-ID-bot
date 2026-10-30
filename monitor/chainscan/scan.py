@@ -109,7 +109,9 @@ def pool_open(a):
     for q in (WBNB, USDT):
         try:
             r = call(FACTORY, '0xe6a43905' + a[2:].rjust(64, '0') + q[2:].rjust(64, '0'))
-            if r and int(r, 16): return True
+            if r and int(r, 16):  # 交易对存在不等于开池：fair mint 常预建空池，需储备>0
+                rs = call('0x' + r[-40:], '0x0902f1ac')
+                if rs and len(rs) >= 130 and int(rs[2:66], 16) > 0 and int(rs[66:130], 16) > 0: return True
         except Exception: pass
     return False
 def new_wallet(dep, blk, bt):

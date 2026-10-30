@@ -11,7 +11,7 @@ extra = os.path.join(D, 'watch_sites.txt')
 if os.path.exists(extra): SITES += [l.strip() for l in open(extra) if l.strip() and not l.startswith('#')]
 def grab(site):
     out = {}
-    for p in ['/llms.txt', '/skill.md', '/agent.md']:
+    for p in ['/llms.txt', '/skill.md', '/agent.md', '/deployment.json']:
         try:
             r = urllib.request.urlopen(urllib.request.Request('https://' + site + p, headers={'user-agent': 'Mozilla/5.0'}), timeout=10)
             t = r.read(200000).decode('utf8', 'ignore')
