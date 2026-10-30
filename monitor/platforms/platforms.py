@@ -6,8 +6,14 @@ D = os.path.dirname(os.path.abspath(__file__)); SD = os.path.join(os.environ['AI
 UA = {'user-agent': 'Mozilla/5.0', 'content-type': 'application/json'}
 PULSE = 'https://web3.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/pulse/rank/list/ai'
 def get(url, body=None):
-    r = urllib.request.Request(url, json.dumps(body).encode() if body else None, UA)
-    return json.load(urllib.request.urlopen(r, timeout=15))
+    last = None
+    for i, t in enumerate((12, 20, 30)):  # 超时/5xx 自动重试 3 次
+        try:
+            r = urllib.request.Request(url, json.dumps(body).encode() if body else None, UA)
+            return json.load(urllib.request.urlopen(r, timeout=t))
+        except Exception as e:
+            last = e; time.sleep(2 * (i + 1))
+    raise last
 def four(stage):
     d = get(PULSE, {'chainId': '56', 'rankType': stage, 'protocol': [2004], 'limit': 50,
                     'tokenVersionFilter': {'2004': ['openfour.meme.AgentIdExclusive']}})

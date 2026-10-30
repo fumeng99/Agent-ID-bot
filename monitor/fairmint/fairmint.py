@@ -6,6 +6,7 @@ topic0=0x19f5f791…，按 topic0 全链 getLogs（不限地址），新出现�
 用法：python3 fairmint.py [--minutes 30] [--hours 48]
 """
 import json, os, sys, time, urllib.request
+import sys as _s; _s.path.insert(0,'$AIDBOT_DATA/vendor')
 from Crypto.Hash import keccak
 D = os.path.dirname(os.path.abspath(__file__)); ST = f'{D}/state.json'; OUT = f'{D}/found.json'
 TOPICS = ['0x19f5f791ee407773427bf7b970bbbc3375065c32edd1ab142e23a84f94b0719b']  # Minted(address,uint256,uint256,uint256,uint256)
