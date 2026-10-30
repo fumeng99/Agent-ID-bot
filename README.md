@@ -19,13 +19,15 @@
 | 会话 | `baw/safe_session.sh` `baw/baw-wrapper.sh` | 多账号会话检查、固定 instance_id 防假掉线、唯一允许 signin 的入口 |
 | 留痕 / 自检 | `monitor/log.py` `monitor/doctor.sh` `monitor/accounts.py` | 每步写 events.jsonl；依赖与会话自检；从 config 读账号 |
 | Clawby 数据 | `monitor/clawby.sh` | 推送/买入前查池子流动性、价格、安全、持仓；需 `CLAWBY_API_KEY`，自动限速防封 |
-| 自动更新 | `monitor/update_skills.sh` | 更新 binance-skills-hub、baw CLI（失败回滚）、可选 Clawby |
+| 自动更新 | `monitor/update_skills.sh` | 更新 binance-skills-hub、baw CLI（失败回滚）、首次自动安装并每日更新 Clawby |
 | 核验清单 | `monitor/mint-patterns.json` | 14 类 mint 机制要核验的问题 |
 
 ## 快速开始
 1. 看 [`docs/SETUP.md`](docs/SETUP.md) 装 baw、建账号目录、复制 `config/config.example.json`。
 2. 让你的 Agent 读 [`AGENTS.md`](AGENTS.md)（Claude Code 自动读 `CLAUDE.md`；支持 skill 的工具已自动发现 `.claude/skills/`、`.agents/skills/`，其他平台复制 `skills/agent-id-bot/`）。
-3. 用你的平台的定时功能（cron、Claude Code `/loop`、Codex 自动化、OpenClaw heartbeat 等）每 10 分钟让 Agent 跑一轮「巡逻」。
+3. 用你的平台的定时功能（cron、Claude Code `/loop`、Codex 自动化、OpenClaw heartbeat 等）每 10 分钟让 Agent 跑一轮「巡逻」，提示词直接用 [`docs/prompts/PATROL_PROMPT.md`](docs/prompts/PATROL_PROMPT.md)；每天 09:00 跑 [`docs/prompts/DAILY_UPDATE_PROMPT.md`](docs/prompts/DAILY_UPDATE_PROMPT.md)。
+4. 完整运行规则（每类项目的处理细节、安全边界、学习笔记）在 [`docs/RULES.md`](docs/RULES.md)，巡逻提示词第一步就是读它。授权条款要换成你自己用户的原话。
+5. 装 Clawby 数据技能：设 `CLAWBY_API_KEY` 后运行一次 `bash monitor/update_skills.sh`，会自动下载到 `$AIDBOT_HOME/clawby/clawby-data`。
 
 ## 环境变量
 | 变量 | 默认 | 作用 |
