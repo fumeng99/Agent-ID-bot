@@ -14,3 +14,4 @@
 ## 2026-10-31
 - watch_sites：除指南文件外，再抓首页、脚本及一层 import（config.mjs 等）里的合约地址，修复合约藏在配置文件里漏报（Agent Shift 案例）。
 - AGENTS.md 补面试/签名型免费 Mint 流程。
+- 新增 monitor/clawby.sh（Clawby 数据接口，读 CLAWBY_API_KEY，串行限速防 IP 封禁）；README/AGENTS 补 Clawby 评估说明。Clawby 技能 1.0.64。

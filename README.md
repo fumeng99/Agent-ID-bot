@@ -18,6 +18,7 @@
 | PoW 免费 Mint | `agenthash/powmint.mjs` + `miner.py` | AgentHash 式挖矿 mint（challengeOf / verify / mine） |
 | 会话 | `baw/safe_session.sh` `baw/baw-wrapper.sh` | 多账号会话检查、固定 instance_id 防假掉线、唯一允许 signin 的入口 |
 | 留痕 / 自检 | `monitor/log.py` `monitor/doctor.sh` `monitor/accounts.py` | 每步写 events.jsonl；依赖与会话自检；从 config 读账号 |
+| Clawby 数据 | `monitor/clawby.sh` | 推送/买入前查池子流动性、价格、安全、持仓；需 `CLAWBY_API_KEY`，自动限速防封 |
 | 自动更新 | `monitor/update_skills.sh` | 更新 binance-skills-hub、baw CLI（失败回滚）、可选 Clawby |
 | 核验清单 | `monitor/mint-patterns.json` | 14 类 mint 机制要核验的问题 |
 
@@ -32,6 +33,7 @@
 | `AIDBOT_HOME` | `~/.agent-id-bot` | 放 `baw/`（CLI + accounts/<名>/）、技能库、目录客户端 |
 | `AIDBOT_DATA` | `~/.agent-id-bot/data` | 状态、seen.json、二维码 |
 | `AIDBOT_MAIN_ACCOUNT` | `main` | 主账号目录名 |
+| `CLAWBY_API_KEY` | （无） | Clawby 数据密钥（pk_ 开头），不设则跳过 Clawby 评估 |
 | `AIDBOT_FEED_REPO` | （无） | 项目目录客户端的 git 地址，不设则跳过目录订阅 |
 
 设计思路与踩过的坑：[`docs/DESIGN.md`](docs/DESIGN.md)。
