@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""项目官网 Agent 指南探测（借鉴 EZbot）：python3 probe.py <官网URL>
+"""项目官网 Agent 指南探测：python3 probe.py <官网URL>
 依次读 /skill.md /llms.txt /agent.md /agents.md /api/state /api/collections /.well-known/agent.json，输出存在的文件内容（截断）和其中的合约地址。只读。"""
 import sys, re, json, urllib.request, urllib.parse
 u = sys.argv[1].rstrip('/'); b = '{0.scheme}://{0.netloc}'.format(urllib.parse.urlparse(u if '://' in u else 'https://' + u))

@@ -1,8 +1,8 @@
-// 移植自 agentid-sniper：Flap「ID AGENT CURVE」（只限 Agent ID 的曲线发射台）新盘监控。只读，不交易。
+// Flap「ID AGENT CURVE」（只限 Agent ID 的曲线发射台）新盘监控。只读，不交易。
 import fs from "fs";
 const RPC="https://bsc-rpc.publicnode.com", READER="0x18aa6c93f1887a243fdc348c9a77f5136555174a";
 const Q={'0x4902c5ebc598265ed2212b559b042de8a5eeec3f':'BNCB','0x02fca66c1d1afb4e2a7884261eb00f63598a7436':'NVDAB','0x205812cdbed920aff76c6580abd681a46d11efc7':'QQQB','0xbe9d156892e55e7154bcd3cb0fea677f9d3103e1':'SPCXB'};
-const SF=new URL("./state.json",import.meta.url).pathname;
+import fs0 from "fs"; const SF=process.env.AIDBOT_DATA?(fs0.mkdirSync(process.env.AIDBOT_DATA+"/flap",{recursive:true}),process.env.AIDBOT_DATA+"/flap/state.json"):new URL("./state.json",import.meta.url).pathname;
 const w=n=>BigInt(n).toString(16).padStart(64,'0'), wa=a=>a.toLowerCase().replace(/^0x/,'').padStart(64,'0');
 const call=async(to,data)=>{const r=await fetch(RPC,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'eth_call',params:[{to,data},'latest']})});return (await r.json()).result;};
 const dec=(hex,o)=>{const h=hex.replace(/^0x/,'');const len=Number(BigInt('0x'+h.slice(o*2,o*2+64)));return Buffer.from(h.slice(o*2+64,o*2+64+len*2),'hex').toString('utf8');};

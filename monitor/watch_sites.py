@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Agent ID 项目官网指南变动监控（借鉴 EZbot 案例库）：对 watchlist 里每个站读 /llms.txt /skill.md /agent.md，
+"""Agent ID 项目官网指南变动监控：对 watchlist 里每个站读 /llms.txt /skill.md /agent.md，
 内容变了就输出新出现的合约地址和摘要（项目常在同一站点开新系列）。只读。状态 watch_state.json。"""
 import json, os, re, hashlib, urllib.request
 from concurrent.futures import ThreadPoolExecutor
-D = os.path.dirname(os.path.abspath(__file__)); ST = os.path.join(D, 'watch_state.json')
+D = os.path.dirname(os.path.abspath(__file__)); SD = os.path.join(os.environ['AIDBOT_DATA'], 'sites') if os.environ.get('AIDBOT_DATA') else D; os.makedirs(SD, exist_ok=True); ST = os.path.join(SD, 'watch_state.json')
 SITES = ['ptah.trade','bibiai.fun','agentpunk.fun','stockerpunk.com','anthrobit.fun','build-100.com','bncworld.fun','hashdroids.fun',
  'gridpunks-vert.vercel.app','aivy.me','aiagentid.vercel.app','agentpad.surge.sh','agentidlive.ai','agenticpad.meme','agenticinu.lol',
  'agentbrowser.fun','agent-skelly.fun','artrural.fun','gearz.fun','agenthash.fun','glyphmind.surge.sh','jager.live','boltbook.fun']

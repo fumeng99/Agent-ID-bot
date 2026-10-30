@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Agent ID 内盘新币监控（借鉴 EZbot）：Four.meme OpenFour Agent ID 专区（币安 pulse 榜）+ Gang.fun 新币。
+"""Agent ID 内盘新币监控：Four.meme OpenFour Agent ID 专区（币安 pulse 榜）+ Gang.fun 新币。
 只读；输出上次以来新出现的币 + 进度跳升的币。状态存 state.json。用法: python3 platforms.py"""
 import json, os, time, urllib.request
-D = os.path.dirname(os.path.abspath(__file__)); ST = os.path.join(D, 'state.json')
+D = os.path.dirname(os.path.abspath(__file__)); SD = os.path.join(os.environ['AIDBOT_DATA'], 'platforms') if os.environ.get('AIDBOT_DATA') else D; os.makedirs(SD, exist_ok=True); ST = os.path.join(SD, 'state.json')
 UA = {'user-agent': 'Mozilla/5.0', 'content-type': 'application/json'}
 PULSE = 'https://web3.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/pulse/rank/list/ai'
 def get(url, body=None):

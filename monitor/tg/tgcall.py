@@ -2,7 +2,7 @@
 """监控公开 TG 频道（默认 聪哥 Agent ID Call @agentidcall），只输出上次以来的新帖。
 用法: python3 tgcall.py [频道名...]   状态存 tg/state.json。只读。"""
 import json, os, re, sys, html, urllib.request
-D = os.path.dirname(os.path.abspath(__file__)); ST = os.path.join(D, 'state.json')
+D = os.path.dirname(os.path.abspath(__file__)); SD = os.path.join(os.environ['AIDBOT_DATA'], 'tg') if os.environ.get('AIDBOT_DATA') else D; os.makedirs(SD, exist_ok=True); ST = os.path.join(SD, 'state.json')
 chs = sys.argv[1:] or ['agentidcall']
 st = json.load(open(ST)) if os.path.exists(ST) else {}
 out = {}

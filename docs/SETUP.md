@@ -23,12 +23,12 @@ git clone https://github.com/binance/binance-skills-hub $AIDBOT_HOME/binance-ski
 cd <仓库>/agenthash && npm install
 ```
 
-App 里要打开开发者模式（合约调用需要），过期要续。
+装完跑 `bash monitor/doctor.sh` 自检。App 里要打开开发者模式（合约调用需要），过期要续。
 
 ## 让 Agent 定时巡逻
 - **Claude Code**：在仓库里开会话，`/loop 10m 按 AGENTS.md 跑一轮巡逻`，或 cron 调 `claude -p "按 AGENTS.md 跑一轮巡逻"`。
 - **Codex CLI**：cron 调 `codex exec "按 AGENTS.md 跑一轮巡逻"`。
 - **OpenClaw / 其他常驻 Agent**：把 `skills/agent-id-bot/` 装进技能目录，用它的定时/心跳功能每 10 分钟触发。
-- **无 AI**：cron 只跑发现脚本（scan.py、ezbot_feed.sh、tgcall.py、platforms.py），自己看输出；不会自动铸造。
+- **无 AI**：cron 只跑发现脚本（scan.py、catalog_feed.sh、tgcall.py、platforms.py），自己看输出；不会自动铸造。
 
 每天跑一次 `monitor/update_skills.sh` 保持 baw 和技能库最新（失败自动回滚）。

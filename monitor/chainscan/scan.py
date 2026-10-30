@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""链上发现 Agent ID 专属铸造（借鉴 agentid-sniper）。
+"""链上发现 Agent ID 专属铸造。
 每次运行：扫描自上次以来（最多最近 35 分钟）的 BSC 区块里所有 Transfer(from=0x0) 铸造事件，
 维护 30 分钟滚动窗口；同一代币/NFT 被铸给 >=6 个不同钱包即为候选，再判断：
   - 代币/目标合约（含 EIP-1967/Beacon 代理实现）合约码里含 Agent ID 登记合约 => agentid=code
@@ -10,7 +10,7 @@
 """
 import json, os, sys, time, urllib.request, hashlib
 D = os.path.dirname(os.path.abspath(__file__))
-STATE = os.path.join(D, 'state.json'); OUT = os.path.join(D, 'candidates.json')
+SD = os.path.join(os.environ['AIDBOT_DATA'], 'chainscan') if os.environ.get('AIDBOT_DATA') else D; os.makedirs(SD, exist_ok=True); STATE = os.path.join(SD, 'state.json'); OUT = os.path.join(SD, 'candidates.json')
 RPCS = ['https://bsc.blockrazor.xyz', 'https://bsc-dataseed.bnbchain.org', 'https://bsc-dataseed1.defibit.io']
 LOG_RANGE = 25
 REGISTRY = '60b9262456de011f7d15a54cdd8c48baaa8b022f'
@@ -73,7 +73,7 @@ WBNB = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c'; USDT = '0x55d398326f99059ff
 FACTORY = '0xca143ce32fe78f1f7019d7d551a6402fc5350c73'
 WINNERS = ['0x8e6442663a4f8c50b6132c68d42a30e7dfe4ae15', '0x04fd77c2f97d044b3c719282fd0a0568f4254afa', '0x415aac3e46264c046d103c994a1da71f05c547f9', '0x171f264f938d55d968afc5d6b133c4157a61f05f']
 BAD_SEL = {'0xa9059cbb','0x095ea7b3','0x23b872dd','0x42842e0e','0xb88d4fde','0xa22cb465','0x39509351','0xd505accf','0xf242432a','0x2eb2c2d6'}
-SMART_FILE = os.path.join(D, 'smart.json')
+SMART_FILE = os.path.join(SD, 'smart.json')
 def code_at(a, b):
     try: return (rpc('eth_getCode', [a, hex(b)]) or '0x')
     except Exception: return None

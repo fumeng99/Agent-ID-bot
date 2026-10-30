@@ -8,7 +8,7 @@
   "autoFreeMint": { "enabled": true, "maxPerWallet": 10, "maxGasLimit": 800000 },
   "spending": { "allowAutoPaid": false, "_allowAutoPaid": "保持 false：付费一律等用户在对话里说「确认买入 XX 金额 + 账号」" },
   "sources": {
-    "chainscan": true, "ezbotFeed": true, "telegramChannels": ["agentidcall"],
+    "chainscan": true, "catalogFeed": true, "telegramChannels": ["agentidcall"],
     "platforms": true, "flap": true, "watchSites": true, "webSearch": true
   },
   "report": { "everyRun": true, "paidProgressAlertPct": 60, "currency": "USDT" },
