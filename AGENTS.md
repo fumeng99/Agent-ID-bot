@@ -95,3 +95,18 @@
 
 ## 改代码时
 提交功能或修复同时更新 `CHANGELOG.md`；不得放宽上面两条原则；脚本里不得写死个人路径、地址、账号名（用环境变量和 config）。
+
+## 自动补 gas（需用户授权）
+- 每轮运行 `python3 monitor/gas_topup.py`：BNB < 0.003 且 USDT ≥ 6 时用 6U 换 BNB，每号每天最多 2 次；阈值可用 `GAS_MIN_BNB` / `GAS_TOPUP_USDT` / `GAS_MAX_PER_DAY` 调整。补了就汇报账号、金额、orderId；USDT 不足或到上限提醒用户。
+
+## 解题/签名型免费 Mint
+- 不直接跳过：先读官网 skill.md / llms.txt / JS，找 challenge → 解题 → submit → 拿 mint 授权签名 → mint 流程，能自动就自动，最后 mint 仍 value=0 + preview 干净才 execute。
+- 只接受项目方发给本地址的 mint 授权；绝不签 permit / approve / setApprovalForAll 或任何可转走资产的链下消息；需钱包 personal_sign 登录的先问用户。
+- 做不了（验证码、社交任务、人工审核、签名类型不明）必须单独通知用户：项目名、官网、卡在哪步、截止/剩余数量。
+
+## 合约风险检查
+- 付费项目买前跑 `python3 monitor/riskcheck.py <token>`：查可增发/暂停/黑名单/改税权限，并模拟转入 Pancake 池测貔貅。selector 检测是启发式，不等于完整审计。
+
+## 定时开放抢铸 / 新号补领
+- 分阶段、限时开放的免费 Mint：查到开放时间后单独建一次性定时任务，在开放前 3 分钟跑 `python3 monitor/phase_mint.py --contract <合约> --data <freeMint calldata> --at <unix秒>`（或 `--at-selector` 从合约读）。
+- 新号登录后跑 `python3 monitor/backfill.py --dry` 看能补领哪些，再去掉 `--dry` 执行；含签名/Merkle proof 的会列为「人工」，走官网流程。
