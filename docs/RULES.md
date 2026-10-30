@@ -5,6 +5,13 @@ CLI：$AIDBOT_HOME/baw/node_modules/.bin/baw，运行前 export HOME=$AIDBOT_HOM
 Binance 官方技能文档：$AIDBOT_HOME/binance-skills-hub/skills/binance-web3/（binance-agentic-wallet、query-token-audit、query-token-info、meme-rush 等）
 contract-call calldata 编码示例：$AIDBOT_HOME/baw/enc.mjs（@noble/hashes keccak）
 
+## 官网免费入口全量扫描（每轮必做，2026-10-31 用户追问「确保不会漏东西」后加）
+- 起因：SAFU 官网有 NFT、mint、token 三个合约，巡逻只打了 NFT，漏了 claimFree 领币；sitescan 首跑又找到漏掉的 HASHDROIDS Free Pass（已补领）。
+- 每轮运行 `cd $AIDBOT_DATA && timeout 110 python3 sitescan.py`。它扫 watch_sites（含 watch_sites.py 内置列表）+ seen.json 的官网，读首页/脚本/一层 import/llms.txt/skill.md，提取全部合约和 claim/mint/register/airdrop 类写函数（ABI、签名文本、selectors 映射），要求字节码含该选择器，用 value=0 对每个账号 eth_call。
+- new_callable：某账号从不可调用变可调用。逐个按第 5 步 baw preview，干净（value 0、只得 NFT/代币、无授权/风险）就 execute，写 seen.json（同合约更新、新入口新增对象），消息里写「官网新入口」。Hash21 claim() 仍按 5a 只在 08:00–09:00 领。
+- needs_params：参数含签名/proof/数组，不能盲调。按第 5c 步读官网流程尝试；做不了在消息里单独写一段（站点、函数、卡点）。每站每函数只报一次。
+- 发现新项目官网一律加进 watch_sites.txt，sitescan 才会覆盖。纯链上发现、没有官网的项目靠 chainscan/fairmint，不在此范围。
+
 ## 持仓开盘提醒（每轮必做，2026-10-31 02:54 用户原话「打了的东西有开盘也要立马通知我」）
 - 每轮第 1 步之后立刻运行 `python3 $AIDBOT_DATA/opencheck.py`。它检查 seen.json 里我们打过/持有的项目代币（token 字段 > 合约 token() > 合约本身），五号合计有持仓且 DEX 上已有流动性 ≥ 50 美元的池子就输出到 new_open，并自动记 open_alerted:true（每个项目只提醒一次）。
 - new_open 非空时，巡逻消息第一行就写「🔔开盘：项目名」，再写：DEX、现价（美元）、流动性、各账号持仓数量、合计价值（U）、Dexscreener 链接（url 字段）；并跑 `python3 riskcheck.py <token> <持仓地址>` 写貔貅/权限结论。结尾写「需要卖请回复：确认卖出 + 项目 + 账号」（夜间自动买入的仓位仍按止盈止损规则处理）。

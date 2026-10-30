@@ -24,6 +24,7 @@ RPC 限流：余额或链上查询遇到 429/5xx 时换节点重试（bsc-datase
 1c. 新号补领：accounts.json 里出现 seen.json 中从未记录过的账号时，先 `cd $AIDBOT_DATA && python3 backfill.py --dry`，再去掉 --dry 执行；成功的写回 seen.json。calldata 含签名/Merkle proof/时间戳的不能盲目替换地址，改走第 5c 步。
 1d. 回查跳过项：seen.json 里 status 含「跳过」或「待查」且仍在铸造中的项目，每轮按第 5b/5c 步重新尝试；做不了的必须单独提醒用户一次（记 skip_alerted:true）。
 1e. 持仓开盘提醒：运行 `python3 $AIDBOT_DATA/opencheck.py`，new_open 非空时按 RULES.md「持仓开盘提醒」在消息第一行写「🔔开盘：项目名」及详情。
+1f. 官网免费入口全量扫描：运行 `timeout 110 python3 $AIDBOT_DATA/sitescan.py`，按 RULES.md「官网免费入口全量扫描」处理 new_callable 和 needs_params。
 2. 链上发现（最优先）：`cd $AIDBOT_DATA/chainscan && SCAN_BUDGET=60 timeout 200 python3 scan.py`（background 运行并等待）。读 chainscan/candidates.json 所有候选，逐个进入第 4–6 步；risk_flags 非空 / auto_ok=false 的不自动铸造，只提醒并写原因。处理完从 candidates.json 删除并写入 seen.json。输出 unchecked_left>0 时在消息里写一句，下轮优先处理。
 2b. TG 频道：`python3 $AIDBOT_DATA/tg/tgcall.py agentidcall`，新帖免费项目按合约对照 seen.json，各账号缺哪个补哪个；付费帖做投研和合约安全审查（夜间按 6b）。
 2c. 内盘平台：`python3 $AIDBOT_DATA/platforms/platforms.py`（Four.meme Agent ID 专区 + Gang.fun 新币），筛选后写进快报；付费项目白天只投研，夜间按 6b。
