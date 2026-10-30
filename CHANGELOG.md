@@ -16,3 +16,4 @@
 - AGENTS.md 补面试/签名型免费 Mint 流程。
 - 新增 monitor/clawby.sh（Clawby 数据接口，读 CLAWBY_API_KEY，串行限速防 IP 封禁）；README/AGENTS 补 Clawby 评估说明。Clawby 技能 1.0.64。
 - rpcpool.py：11 个 BSC 公共节点轮换防 429，gas_topup/bawlib 改用批量查询。
+- 体检：flap/powmint/backfill 改多节点；seen.json 去重规则；1d 回查含「待查」；交易链接格式。

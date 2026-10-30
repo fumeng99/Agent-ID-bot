@@ -4,7 +4,7 @@ import { ethers } from "ethers"; import { execFileSync } from "child_process";
 const [,,C,ACC,ADDR,...rest]=process.argv; const dry=rest.includes("--dry"); const max=Number(rest[rest.indexOf("--max")+1]||1)||1;
 const ABI=["function challengeOf(address) view returns (bytes32)","function verify(address,uint256) view returns (bool ok,uint256 work,uint256 target)","function mine(uint256 nonce) payable returns (uint256)",
 "function status(address miner) view returns (tuple(bool open,uint256 issued,uint256 drawn,uint256 maxSupply,uint256 blockNumber,uint256 timestamp,uint256 networkTarget,uint256 minerTarget,bytes32 minerChallenge,uint256 phaseBits,uint256 phase1Bits,uint256 bitsPerPhase,uint256 pending,bool drawReady,uint256 nextDrawBlock,tuple(uint8 phase,uint8 reason,bool free,uint256 priceUsd,uint256 priceWei,uint8 priceSource) quote,tuple(uint16 freePhase1,uint16 freeLater,uint16 paidTotal,uint8 freeLaterPhase) wallet,uint256 freeLeft,uint256 paidThisPhase,uint256 bnbUsd,uint8 priceSource,bool agentHolder,uint256 minedBy))"];
-const p=new ethers.JsonRpcProvider("https://bsc-rpc.publicnode.com"); const c=new ethers.Contract(C,ABI,p);
+const p=new ethers.FallbackProvider(["https://bsc-dataseed.bnbchain.org","https://bsc-rpc.publicnode.com","https://bsc.blockrazor.xyz","https://bsc.drpc.org"].map((u,i)=>({provider:new ethers.JsonRpcProvider(u,56,{staticNetwork:true}),priority:i+1,weight:1,stallTimeout:2500})),56,{quorum:1}); const c=new ethers.Contract(C,ABI,p);
 const W=process.env.AIDBOT_HOME||(process.env.HOME+"/.agent-id-bot"); const BAW=`${W}/baw/node_modules/.bin/baw`; const env={...process.env,HOME:`${W}/baw/accounts/${ACC}`};
 const out=[];
 for(let i=0;i<max;i++){

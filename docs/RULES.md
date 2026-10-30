@@ -197,3 +197,10 @@ contract-call calldata 编码示例：$AIDBOT_HOME/baw/enc.mjs（@noble/hashes k
 - 09:00–24:00 只投研；00:00–09:00 仍按「夜间自动付费进场与止盈止损」处理。
 - 面试/签名型（如 Agent Shift）：读站点 agent-guide.md / mint-api/agent，按文档用 baw sign-message preview→execute 做 EIP-712 登录与激活（只签 EIP-712，不签 personal_sign/permit/approve），独立解题，拿到 verifier 授权后 mint 仍须 value=0 预演干净才 execute；遇 X 任务/验证码等人工步骤立即单独通知用户。
 - 2026-10-31 RPC 429 根治：rpcpool.py（11 个公共节点轮换、429/5xx 自动换节点并冷却 60 秒、批量请求一次查完所有账号）；gas_topup.py 已改用。其他脚本查余额也优先 from rpcpool import rpc, batch。
+
+## 巡逻补充（2026-10-31 体检）
+- 余额/链上查询一律 `from rpcpool import rpc, batch`（11 节点轮换，429 自动换）；多个账号用 batch 一次查完。
+- 第 1d 步回查范围扩大：status 含「跳过」或「待查」的都要回查（同样每轮最多 5 个、记 skip_alerted）。没有合约地址的先用备注里的短地址/boltbook 链接 web_search 找全地址。
+- seen.json 写入前按合约地址小写去重：已存在就更新原对象，不再 append 第二条。
+- 「已提交待确认」的项目下一轮必须用 batch balanceOf 核对，到账后把 status 改成「五号已到账（时间 CST）」。
+- 汇报交易时把 BscScan 链接直接写在账号后面（例：主：https://bscscan.com/tx/0x…），不要把账号和链接分开写，避免出现空的「001：」。
