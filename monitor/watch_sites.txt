@@ -4,3 +4,5 @@ israt.fun
 wobblokz.pages.dev
 agentshift.lol
 hirelings.pages.dev
+
+https://safuagent.vercel.app/

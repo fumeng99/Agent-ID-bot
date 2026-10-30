@@ -204,3 +204,6 @@ contract-call calldata 编码示例：$AIDBOT_HOME/baw/enc.mjs（@noble/hashes k
 - seen.json 写入前按合约地址小写去重：已存在就更新原对象，不再 append 第二条。
 - 「已提交待确认」的项目下一轮必须用 batch balanceOf 核对，到账后把 status 改成「五号已到账（时间 CST）」。
 - 汇报交易时把 BscScan 链接直接写在账号后面（例：主：https://bscscan.com/tx/0x…），不要把账号和链接分开写，避免出现空的「001：」。
+- 仓库文档（2026-10-31 重写为正式风格）：README/SETUP/DESIGN/SECURITY/CHANGELOG 源文件在 $AIDBOT_HOME/agentid-native/，改这里才不会被同步覆盖。CHANGELOG 按 Keep a Changelog 格式，把条目写进顶部当天日期下的「新增/变更/修复」，不要 echo 追加到文件末尾。
+- 汇报故障要具体（2026-10-31 用户追问「出了小故障已修好」是什么）：写清哪个脚本、报错原文一句、怎么处理的（重跑/换节点/改了哪个文件）。只是重跑成功就写「重跑后正常」，不要写「已修好」；改了脚本必须当轮 sync_github.sh 并写提交号。
+- 一站多合约（2026-10-31 SAFU 案例：NFT 免费 mint 打了，但同站 mint 合约的 claimFree(bytes32) 免费领币漏了）：发现项目后必须读官网 JS 配置里的全部合约和 selectors（token/mint/nft/claim），每个 value=0 的免费入口都 eth_call 模拟一遍，能领的都领。
