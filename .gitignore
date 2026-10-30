@@ -1,0 +1,11 @@
+state.json
+seen.json
+candidates.json
+latest.json
+*.log
+*.png
+instance_id
+accounts/
+node_modules/
+__pycache__/
+.env
