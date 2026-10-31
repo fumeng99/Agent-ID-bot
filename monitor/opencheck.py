@@ -120,7 +120,15 @@ for i, (x, t) in enumerate(items):
     if cost is None and str(x.get('type', '')).startswith('free'): cost = 0.0
     pnl = round(val - cost, 2) if (val is not None and cost is not None) else None
     pct = round(pnl / cost * 100, 1) if (pnl is not None and cost) else None
-    new.append({'name': x.get('name'), 'contract': x['contract'], 'token': t, 'held_by_account': per, 'held_total': sum(per.values()),
+    # 用户 2026-11-01 03:03：开盘要告诉我「我打的基础价格和基础市值」。基础价=成本÷持仓枚数；市值按 totalSupply 算。
+    try: sup = int(batch([('eth_call', [{'to': t, 'data': '0x18160ddd'}, 'latest'])], tolerant=True)[0], 16) / 10 ** dec
+    except Exception: sup = None
+    held_n = sum(per.values())
+    entry_px = (cost / held_n) if (cost and held_n) else None
+    cur_px = float(ds['price_usd']) if ds.get('price_usd') else None
+    basis = {'total_supply': sup, 'entry_price_usd': entry_px, 'entry_mcap_usd': round(entry_px * sup, 0) if (entry_px and sup) else None,
+             'cur_mcap_usd': round(cur_px * sup, 0) if (cur_px and sup) else None, 'x_vs_entry': round(cur_px / entry_px, 2) if (cur_px and entry_px) else None}
+    new.append({**basis, 'name': x.get('name'), 'contract': x['contract'], 'token': t, 'held_by_account': per, 'held_total': sum(per.values()),
                 'value_usd': val, 'cost_usd': round(cost, 2) if cost is not None else None, 'pnl_usd': pnl, 'pnl_pct': pct,
                 'verdict': None if pnl is None else ('赚' if pnl > 0 else '亏' if pnl < 0 else '持平'), **ds})
     if not DRY: x['open_alerted'] = True; x['opened_info'] = ds

@@ -366,3 +366,6 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 - 采纳：BIBIAI LaunchPad（AGENT ID 那类）进度要用「已售 totalMinted / 开池份数 openThreshold」读，我们的 fair mint 扫描漏了它（EIP-1167 代理 + 非 Jager 模板）。platforms.py 新增 bibiai 来源（https://launch.bibiai.meme/api/projects），输出 bibiai（新盘/进度跳升）和 bibiai_hot（未开池且 ≥60%）。巡逻：bibiai 新盘放「▍提醒」并带项目页链接；bibiai_hot 按 60% 提醒规则做完整审计（verify_source 查实现合约、riskcheck、query-token-audit、query-token-info、treasury_bps≤2000、refund_deadline），需要买的放「⚠️ 需处理」等用户确认。BIBIAI 不在 autofill 自动打满范围内（不是 Jager/AGI 模板，源码未验证的照规则 B 跳过）。
 - 未采纳：照抄交易遇 MAX_COST 时把金额 +2%～+35% 逐步重试——这是自动改金额，违反规则 F，不移植。
 - 待用户决定：对方把门槛统一改 60% 且「付费必须合约内有退款（保本）函数才打」。我们已是 60% 提醒 / 70% 打满；退款函数要求是否加入自动买条件，等用户回复。
+
+### 开盘必报基础价/基础市值（用户 2026-11-01 03:03）
+opencheck 的 new_open 现在带 entry_price_usd（成本÷持仓枚数）、entry_mcap_usd（基础价×总量）、cur_mcap_usd、x_vs_entry、total_supply。开盘提醒必须写：我们打的基础价格、基础市值、现价、现市值、倍数、盈亏 U 和 %、链接。「▍持仓」区每个仓位也写基础价/基础市值 → 现价/现市值。
