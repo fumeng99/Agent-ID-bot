@@ -2,13 +2,16 @@
 import sys,json,subprocess,os,time
 sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 from confirm import confirm_tx, bal_of
+from guard import flap_guard
 C=sys.argv[1].lower(); D=sys.argv[2]
 accts=json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
 B='$AIDBOT_HOME/baw/node_modules/.bin/baw'
 out=[]
 only=sys.argv[3:]
+import fcntl
 for a in accts:
     if only and a['label'] not in only: continue
+    _lk=open(f"/tmp/acct_{a['label']}.lock",'w'); fcntl.flock(_lk, fcntl.LOCK_EX)  # 同一账号一次只送一笔，避免 in progress 报错
     env=dict(os.environ,HOME=a['home'],npm_config_cache='/tmp/npmcache')
     def run(args):
         r=subprocess.run([B]+args+['--json'],env=env,capture_output=True,text=True,timeout=120)
@@ -17,6 +20,8 @@ for a in accts:
     p=run(['contract-call','preview','--binanceChainId','56','--from',a['bsc'],'--to',C,'--value','0','--inputData',D])
     if not p.get('success'): out.append((a['label'],'preview_fail',str(p)[:200])); continue
     d=p['data']; sr=d['simulationResult']
+    fg=flap_guard(C,D,sr)
+    if fg: out.append((a['label'],'flap_block',fg)); continue
     bc=sr.get('balanceChanges',[])
     ok=(sr.get('simulationCode')=='000000000' and not sr.get('allowanceChanges') and not sr.get('authorityChanges')
         and not d['risks'].get('riskDetails') and not d['risks'].get('riskBehaviors') and not any(d['risks'].get('addresses',{}).values() if d['risks'].get('addresses') else [])

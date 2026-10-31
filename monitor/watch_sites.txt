@@ -6,3 +6,5 @@ agentshift.lol
 hirelings.pages.dev
 
 https://safuagent.vercel.app/
+https://ptah.trade/iao
+https://agentmao.fun

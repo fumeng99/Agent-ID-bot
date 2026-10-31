@@ -260,3 +260,53 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 - 候选逐个跑 `python3 mint_many.py <合约> <calldata> <账号...>`：每号 preview，value=0、simulationCode 000000000、无授权/权限变化、risks 空、余额只增不减（除 gas）才 execute，并核对 receipt。
 - 只领属于我们地址的奖励/空投/分红/挖矿产出；不碰 unlock/withdraw 本金（用户单独要求的除外，如 Moribundus 祭坛由任务 4ad9da14 处理）、不卖、不转、不 approve；需要付费或签名的领取按原规则先问。
 - 新发现的可领合约（非 seen.json 来源）手动加进 extra_claim_targets.json。消息里写领到了什么、账号、tx 链接、到账状态。
+
+## 快速执行脚本（2026-10-31 19:30 用户要求加速）
+- fast_sell.py <token> [pct] ：五号并发市价卖成 USDT（gas HIGH，滑点 8），约 2–5 秒发出订单。只在用户明确说卖或已授权止损触发时用。
+- fair_buy.py <mint> <token> <份数> [--max U] [--dry]：fair mint 五号并发买，每号仍 preview 干净才 execute。
+- price_trigger.py <token> --trail 30 / --tp 2:50 / --below P：每 3 秒盯价自动卖（单次最长约 18 分钟，长期盯盘用定时任务接力）。仅用于用户授权的币和条件。
+
+## 学自  v2.3.2–v2.3.4（2026-10-31 19:32，工具在 guard.py）
+- 禁止 Flap：不跟 Flap 合约（guard.FLAP_BLOCK）互动、不授权给 Flap；preview 的 allowanceChanges 出现 Flap 一律放弃。巡逻时顺便查五号授权列表，发现授权给 Flap 立刻通知用户（取消授权属于改授权，需用户同意后才做）。19:32 检查五号均无 Flap 授权。
+- 进度合理性：读到进度 <3% 但已 ≥50 个代理人 / ≥1000 份 / 3 分钟 ≥15 钱包在打 → 判定读错（如总量写 444 万但 1 万份开池），改用库存/开池份数算进度，还不合理就按热度判断，别因此漏打。
+- 照抄别人交易：先抓最新一笔成功交易（>90 秒就重抓），用 guard.fresh_deadline 把期限参数换成 15 分钟后；带别人 Agent ID 编号的参数换成自己的（guard.agent_id(名称)）。
+- 带自己 Agent ID 编号的免费铸造（mint(agentTokenId)/claim(编号)，如 SYNAPE）：用自己编号去 preview，干净才铸。
+- 买到付费币后用 guard.lock_check 模拟转账，转不出去（白名单锁/貔貅）要在汇报里警告。fair_buy.py 已自动做。
+- 付 USDT 打不了的项目最多再试 2 次，不反复换 USDT。
+- 小额（<3U）币卖不掉不通知，试 6 次放弃；值钱的只在第一次失败时通知。
+- 免费项目热度门槛（原作者：纯免费 3 分钟内 ≥10 钱包才打）：不采用。用户 19:38 原话「只学习优点」，免费 value=0 项目照旧预演干净就打，不等热度，避免漏早期项目。
+- 2026-10-31 19:40 漏打教训（AGENT MAO 猫 0xD6C3…edae，fairmint 已发现但当作付费没打）：fairmint/chainscan 发现的合约，只要 mint 参数里有 agentId（如 mint(shares, agentId, referrerId)），一律先用自己编号试「首份免费」：mint(1, guard.agent_id(名称), 2^256-1) value=0 预演，干净就五号并发铸（mint_many.py 每号单独 calldata）。referrer 一律填 2^256-1，不用别人邀请码。
+- 2026-10-31 19:45 漏打审计：python3 audit_free.py [--mint] 用五号 eth_call 模拟 fairmint 发现的合约和 chainscan 记录的铸造入口（含带自己 Agent ID 编号的写法），列出能免费铸却没铸的；--mint 只铸 verify_source 已验证的（规则 B）。巡逻每轮在第 2e 步后跑一次 --mint。
+- 同一账号并发送交易会报「already in progress」：mint_many.py 已加每号文件锁。
+- 19:45 教训：我手动补铸时漏了规则 B，DNSIEGE/AIDOG/Agent Digger/Mystery Pearl 源码未验证也铸了（只花 gas，无授权）。这些币/NFT 不要再做任何交互（卖出、授权、转账），除非源码后来验证通过。
+- Ptah IAO 状态查询：GET https://ptah.trade/api/iao/airdrop/<小写地址>（status none/registered），offering 0xa2556377118dD333F9f09600DE0bBCf54Cbc69A0，registered 后 claimAirdrop() 0x5b88349d 即可领（value 0）。
+- 20:05 沙箱重置会清掉 pip 包（pycryptodome 丢了，guard/mint_many/fair_buy/claimscan/sitescan/fairmint 会 import 失败）。已装到持久目录 $AIDBOT_HOME/pylib，并在这些脚本开头加 sys.path。以后新脚本要用第三方包也装到 $AIDBOT_HOME/pylib。
+- 2026-10-31 20:08 用户要求「付费的 1w 以内有份额的都要监控」：fairmint 输出新增 watch_unopened（所有未开池项目，不管本轮有没有新 mint，每轮刷新最近 15 个）、near_open（开池进度 ≥60%，按开池份数如前 1 万份计算，或单轮涨 ≥15%）、just_opened。巡逻每条消息都要列出 watch_unopened 的「项目 / 单价 U / 开池进度 已铸/开池份数 / 本轮涨幅」；near_open 放消息第一行单独提醒并附简报；just_opened 提醒已开池。60% 提醒一律按开池进度 open_pct（已铸 ÷ 开池份数，或募集 BNB ÷ 开池 BNB 取大），不是按总份数 progress_pct（币安人就是因为总份数 444 万、显示 0.3% 而漏了提醒）。
+
+## 开池进度 60% 审计 / 70% 自动打满（2026-10-31 20:21 用户「到60%提醒 进入监控 到70%自动打满」，「可以」=每天最多 100U，20:22「不够记得提醒我补」）
+- 开池进度 = 已铸 ÷ 开池份数（如前 1 万份），或募集 ÷ 开池 BNB，取大；不是总份数。
+- ≥60%（fairmint.json near_open）：消息第一行提醒，并当轮做完整审计（verify_source、riskcheck、query-token-audit、query-token-info、资金去向：国库抽成 ≤20%、储备不可提走、LP 入黑洞、无增发给自己），通过就写 fairmint/audit_ok.json {合约: {ok:true, token, note, time}}，不通过写 ok:false 和原因并告诉用户。
+- ≥70%：每轮跑 `python3 autofill.py`，只买 audit_ok=true、未开池、源码已验证的；五号各打满剩余额度（fair_buy.py <合约> <token> 999 --max 单价×1.1，精确授权 + preview）。
+- 预算：每天合计 100U（含当天 30U 规则已花的，较窄读法），账本 autofill.json；超额度不买只提醒。
+- 余额不够（insufficient/low_bnb）不自动换币，只在消息里提醒用户补 USDT/BNB，写清账号和差额。gas_topup 6U 规则照旧。
+- 卖出规则不变（白天只提醒）。
+- TG 频道监控（2026-10-31 20:32 用户要求）：agentidcall + dashutiaozi（https://t.me/dashutiaozi），每轮 discover_all.sh 一起抓。
+
+## 自动仓位止盈止损 v2（用户 2026-10-31 20:45 原话「自动打的 跌40%全部卖 然后翻倍出本」）
+- 适用：6b 夜间自动、6c fair mint 全天自动、6d 70% 打满买入、记在 positions 里的仓位。替换旧的「2 倍卖一半 / 跌 50% 全卖 / 回撤 50% 全卖」。
+- 翻倍出本：每颗价格 ≥ 买入价 2 倍，卖出收回本金的数量（约一半），只触发一次，记 tp_done。
+- 止损：每颗价格 ≤ 买入价 × 0.6（跌 40%），剩余全部卖出。
+- 执行时段：仍只在 00:00–09:00 CST 自动卖；白天触发只提醒（待用户确认是否扩到全天）。
+
+## 推送格式（用户 2026-10-31 20:45 要求「专业一点 数据清晰 格式简洁 条理正确」）
+固定顺序、分区标题、无关区块省略、不写口水话：
+【巡逻 HH:MM】
+⚠️ 需处理（仅有时出现：开盘/60%/补款/掉线/卡住）
+▍账户：在线 5/5 ｜ BNB 主 x · 001 x · …（<0.005 标 ⚠️）
+▍交易：项目｜账号｜动作｜数量｜金额 U｜状态｜tx（无则「本轮无交易」）
+▍额度：30U 规则 已用 x/30 ｜ 打满 已用 x/100
+▍持仓：项目｜买入价｜现价｜盈亏%｜距止损/止盈（有仓位才写）
+▍Fair mint 进度（按开池进度降序，每行：项目 合约前6后4｜单价 U｜进度 %（已铸/开池份数）｜Δ本轮）
+▍新项目 / 简报（有才写，每项：结论一句 + 关键数据 + 链接）
+▍跳过（项目｜原因）
+数字统一：U 保留 2 位，百分比 1 位，地址前 6 后 4，时间 CST。

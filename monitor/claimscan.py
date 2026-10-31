@@ -1,3 +1,4 @@
+import sys as _s; _s.path.append('$AIDBOT_HOME/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
 """claimscan.py — 找我们各账号在已参与项目里「可以领」的东西（只读，不发交易）。
 用户 2026-10-31 18:26 原话「其他需要领取的也要自动领取」。
 做法：从 seen.json 取已铸/已买过的合约（及 extra_claim_targets.json 里手动加的地址），

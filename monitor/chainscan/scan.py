@@ -26,7 +26,7 @@ SKIP = {'0x60b9262456de011f7d15a54cdd8c48baaa8b022f', '0xbb4cdb9cbd36b01bd1cbaeb
         '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', '0xe9e7cea3dedca5984780bafc599bd69add087d56'}
 FREE_SELECTORS = {'0x1249c58b': 'mint()', '0x5b70ea9f': 'freeMint()', '0x4e71d92d': 'claim()', '0xa0712d68': 'mint(uint256)',
   '0x26092b83': 'publicMint()', '0x74d04cfc': 'commitFreeMint()', '0x9f92d0dd': 'registerForRewards()', '0x7c928fe9': 'freeMint(uint256)',
-  '0x379607f5': 'claim(uint256)', '0x8ab53447': 'mintFree()', '0xf366afc9': 'claimFree()', '0x1be3587a': 'agentMint()'}
+  '0x379607f5': 'claim(uint256)', '0x8ab53447': 'mintFree()', '0xf366afc9': 'claimFree()', '0x1be3587a': 'agentMint()', '0x02acc94b': 'mint(uint256,uint256,uint256)'}
 
 
 def _load_json(path, default):
@@ -220,7 +220,8 @@ def main():
         sample = list(ws)[:8]; ai_n = sum(holds_ai(w) for w in sample)
         reg = has_registry(a) or (target and target != a and has_registry(target))
         agentid = 'code' if reg else ('holders' if sample and ai_n / len(sample) >= 0.6 else '')
-        done[a] = 'agentid' if agentid else 'no'; sys.stderr.write(f'chk {a} {len(ws)} {agentid} {time.time()-t0:.1f}s\n')
+        done[a] = 'agentid' if agentid else 'no'
+        if agentid and target: st.setdefault('targets', {})[a] = target; sys.stderr.write(f'chk {a} {len(ws)} {agentid} {time.time()-t0:.1f}s\n')
         if not agentid: continue
         sel = max(sels, key=sels.get) if sels else ''
         flags = []
@@ -250,7 +251,7 @@ def main():
                       'found_at_cst': time.strftime('%Y-%m-%d %H:%M', time.gmtime(now + 8 * 3600))})
     hashes = {k: v for k, v in hashes.items() if any(x[1] >= now - 86400 for x in v)}
     devs = {k: v for k, v in devs.items() if any(x[1] >= now - 86400 for x in v)}
-    st = {'last': last, 'toks': toks, 'checked': dict(list(done.items())[-3000:]), 'devs': devs, 'hashes': hashes, 'black': black}
+    st = {'last': last, 'toks': toks, 'checked': dict(list(done.items())[-3000:]), 'devs': devs, 'hashes': hashes, 'black': black, 'targets': dict(list(st.get('targets', {}).items())[-500:])}
     _save_json(STATE, st)
     old = _load_json(OUT, [])
     have = {c['token'] for c in old}; merged = old + [c for c in cands if c['token'] not in have]

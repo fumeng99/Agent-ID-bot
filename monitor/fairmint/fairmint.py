@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys as _s; _s.path.append('$AIDBOT_HOME/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
 """Jager 类 Agent ID 分档 fair mint（付费）发现器。
 原理：Jager/AGI 克隆合约共用事件 Minted(address,uint256,uint256,uint256,uint256)
 topic0=0x19f5f791…，按 topic0 全链 getLogs（不限地址），新出现的合约读 costOf/opened/totalMinted 等。
@@ -103,9 +104,28 @@ def main():
         else:
             found[a].update({k: v for k, v in info(a).items() if v is not None})
             found[a]['mints_in_scan'] = e['mints']
+    # 2026-10-31 20:05 用户要求：未开池（1 万份以内）的付费 fair mint 每轮都盯，不管这轮有没有新 mint
+    now = time.time(); prev_open = {a: v.get('opened') for a, v in found.items()}
+    stale = [a for a, v in found.items() if not v.get('opened') and a not in seen_now]
+    stale = sorted(stale, key=lambda a: -(found[a].get('first_block_seen') or 0))[:15]
+    for a in stale:
+        try: found[a].update({k: v for k, v in info(a).items() if v is not None})
+        except Exception: pass
+    watch, near, just_opened = [], [], []
+    for a in set(list(seen_now) + stale):
+        v = found[a]
+        op = max(v.get('open_progress_pct') or 0, v.get('open_bnb_progress_pct') or 0)
+        last = v.get('last_open_pct'); d = round(op - last, 2) if last is not None else 0
+        v['last_open_pct'] = op
+        row = {'contract': a, 'name': v.get('name'), 'cost_1share_bnb': v.get('cost_1share_bnb'), 'open_pct': op, 'delta_pct': d, 'total_minted': v.get('total_minted'), 'open_at_shares': v.get('open_at_shares')}
+        if v.get('opened'):
+            if prev_open.get(a) is False or (prev_open.get(a) is None and a in seen_now and last is not None): just_opened.append(row)
+            continue
+        watch.append(row)
+        if op >= 60 or d >= 15: near.append(row)  # 60% 按开池份数(如前 1 万份)算，用户 20:06 确认
     st['last'] = head
     json.dump(st, open(ST, 'w')); json.dump(found, open(OUT, 'w'), ensure_ascii=False, indent=1)
     print(json.dumps({'head': head, 'blocks': head - start + 1, 'log_errors': errors, 'active_contracts': len(seen_now),
-                      'new': new, 'active': {a: {k: found[a].get(k) for k in ('cost_1share_bnb', 'opened', 'progress_pct', 'open_progress_pct', 'open_bnb_progress_pct', 'mints_in_scan')} for a in seen_now}},
+                      'new': new, 'watch_unopened': sorted(watch, key=lambda r: -r['open_pct']), 'near_open': near, 'just_opened': just_opened, 'active': {a: {k: found[a].get(k) for k in ('cost_1share_bnb', 'opened', 'progress_pct', 'open_progress_pct', 'open_bnb_progress_pct', 'mints_in_scan')} for a in seen_now}},
                      ensure_ascii=False, indent=1))
 if __name__ == '__main__': main()
