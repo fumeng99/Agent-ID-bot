@@ -9,6 +9,8 @@
 用法: python3 scan.py [--minutes 35]
 """
 import json, os, sys, time, urllib.request, hashlib
+from concurrent.futures import ThreadPoolExecutor
+T_START = time.time(); DEADLINE = T_START + float(os.environ.get('SCAN_DEADLINE', '150'))  # 总时限：到点前停手并保存进度，避免被外层 timeout 杀掉后 state 不前进、每轮重扫同一段
 D = os.path.dirname(os.path.abspath(__file__))
 SD = os.path.join(os.environ['AIDBOT_DATA'], 'chainscan') if os.environ.get('AIDBOT_DATA') else D; os.makedirs(SD, exist_ok=True); STATE = os.path.join(SD, 'state.json'); OUT = os.path.join(SD, 'candidates.json')
 RPCS = ['https://bsc.blockrazor.xyz', 'https://bsc-dataseed.bnbchain.org', 'https://bsc-dataseed1.defibit.io', 'https://bsc-rpc.publicnode.com', 'https://bsc.drpc.org', 'https://1rpc.io/bnb', 'https://bsc.blockpi.network/v1/rpc/public']
@@ -99,8 +101,9 @@ def deployer_of(a, blk):
             if not tx.get('to'):
                 r = rpc('eth_getTransactionReceipt', [tx['hash']])
                 if (r.get('contractAddress') or '').lower() == a: return tx['from'].lower()
-        for tx in b['transactions']:
-            if len(tx.get('input') or '') > 2000:
+        for tx in [t for t in b['transactions'] if len(t.get('input') or '') > 2000][:15]:  # 最多查 15 张收据，防止大块拖慢
+            if time.time() > DEADLINE - 10: break
+            if True:
                 r = rpc('eth_getTransactionReceipt', [tx['hash']])
                 if any(l['address'].lower() == a for l in r.get('logs', [])) or a[2:] in json.dumps(r).lower(): return tx['from'].lower()
     except Exception: pass
@@ -120,12 +123,14 @@ def new_wallet(dep, blk, bt):
 def load_smart(head, bt):
     sm = json.load(open(SMART_FILE)) if os.path.exists(SMART_FILE) else {}
     if sm.get('built') and time.time() - sm['built'] < 86400: return set(sm['wallets'])
+    if DEADLINE - time.time() < 90: return set(sm.get('wallets', []))  # 时间不够就沿用旧名单，下轮再重建
     cnt = {}
     for t in WINNERS:
         cb = creation_block(t, head, back=6000000)
         if not cb: continue
         seen = []
         for f in range(cb, cb + 3000, LOG_RANGE):
+            if DEADLINE - time.time() < 60: return set(sm.get('wallets', []))
             try: logs = rpc('eth_getLogs', [{'address': t, 'fromBlock': hex(f), 'toBlock': hex(f + LOG_RANGE - 1), 'topics': [T_TRANSFER, ZERO32]}])
             except Exception: continue
             for l in logs:
@@ -148,10 +153,19 @@ def main():
     toks = st.get('toks', {})  # token -> {wallet: [ts, tx]}
     errors = 0
     sys.stderr.write(f'scan {start}->{head} bt={bt}\n'); tl = time.time()
-    for f in range(start, head + 1, LOG_RANGE):
-        t = min(f + LOG_RANGE - 1, head)
-        try: logs = rpc('eth_getLogs', [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [T_TRANSFER, ZERO32]}])
-        except Exception: errors += 1; continue
+    ranges = [(f, min(f + LOG_RANGE - 1, head)) for f in range(start, head + 1, LOG_RANGE)]
+    log_end = T_START + (DEADLINE - T_START) * 0.45; last = start - 1
+    def getlogs(r):
+        if time.time() > log_end: return None
+        try: return rpc('eth_getLogs', [{'fromBlock': hex(r[0]), 'toBlock': hex(r[1]), 'topics': [T_TRANSFER, ZERO32]}])
+        except Exception: return 'err'
+    with ThreadPoolExecutor(4) as ex: res = list(ex.map(getlogs, ranges))
+    log_end += 20  # 报错段顺序补扫一次（节点冷却后换节点）；仍失败按旧规则记 error 跳过，只有没轮到的段留给下一轮
+    res = [(getlogs(r) or 'err') if x == 'err' else x for r, x in zip(ranges, res)]
+    for (f, t), logs in zip(ranges, res):
+        if logs is None: break  # 超时未扫的区块留给下一轮（不跳块）
+        last = t
+        if logs == 'err': errors += 1; continue
         ts = now - int((head - t) * bt)
         for l in logs:
             a = l['address'].lower()
@@ -171,7 +185,7 @@ def main():
     for a, ws in sorted(toks.items(), key=lambda x: -len(x[1])):
         smart_n = len(smart & set(ws))
         if (len(ws) < MIN_WALLETS and smart_n < 2) or a in done: continue
-        if time.time() - t0 > budget: pending += 1; continue
+        if time.time() - t0 > budget or DEADLINE - time.time() < 25: pending += 1; continue
         try:
             if call(a, '0x0dfe1681') not in ('0x', None) and len(call(a, '0x0dfe1681')) >= 66: done[a] = 'lp'; continue  # LP 代币
         except Exception: pass
@@ -217,11 +231,11 @@ def main():
                       'found_at_cst': time.strftime('%Y-%m-%d %H:%M', time.gmtime(now + 8 * 3600))})
     hashes = {k: v for k, v in hashes.items() if any(x[1] >= now - 86400 for x in v)}
     devs = {k: v for k, v in devs.items() if any(x[1] >= now - 86400 for x in v)}
-    st = {'last': head, 'toks': toks, 'checked': dict(list(done.items())[-3000:]), 'devs': devs, 'hashes': hashes, 'black': black}
+    st = {'last': last, 'toks': toks, 'checked': dict(list(done.items())[-3000:]), 'devs': devs, 'hashes': hashes, 'black': black}
     json.dump(st, open(STATE, 'w'))
     old = json.load(open(OUT)) if os.path.exists(OUT) else []
     have = {c['token'] for c in old}; merged = old + [c for c in cands if c['token'] not in have]
     json.dump(merged[-200:], open(OUT, 'w'), ensure_ascii=False, indent=1)  # 巡逻处理后自行删除已处理项
-    print(json.dumps({'head': head, 'blocks': head - start + 1, 'block_time': round(bt, 3), 'log_errors': errors,
+    print(json.dumps({'head': head, 'scanned_to': last, 'blocks': last - start + 1, 'blocks_left': head - last, 'elapsed_s': round(time.time() - T_START, 1), 'block_time': round(bt, 3), 'log_errors': errors,
                       'tokens_in_window': len(toks), 'unchecked_left': pending, 'new_candidates': cands}, ensure_ascii=False, indent=1))
 if __name__ == "__main__": main()
