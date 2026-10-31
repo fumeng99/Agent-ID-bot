@@ -353,3 +353,6 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 - 任何打成功（免费铸造、自动买、打满、用户手动指令买入）都必须当轮在消息里报：项目名、合约、账号、份数、金额 U、tx。
 - 每次打成功都要写进 seen.json 并带 token 地址（手动指令买的也写），这样 opencheck.py 才会在开池时提醒；开池提醒放「⚠️ 需处理」第一行：项目、代币、池子、现价 vs 我们成本价（盈亏%）、流动性、DexScreener 链接。
 - 买入/付费铸造写 seen.json 时必须带成本：cost_bnb（BNB 计价）或 cost_usd（U 计价），免费铸造 type 以 free 开头按 0。opencheck.py 开盘时输出 cost_usd / value_usd / pnl_usd / pnl_pct / verdict（赚/亏），开盘提醒必须写清「赚了还是亏了、多少 U、多少%」。
+
+## 报告必须带链接（用户 2026-11-01 02:53 原话「有链接的要给我链接才对」）
+- 每个提到的项目都附可点链接：项目官网/铸造页（有就给）、BscScan 合约、代币页、DexScreener/GeckoTerminal 池子、Sourcify 源码；每笔交易附 BscScan tx 链接。只给缩写地址不算。
