@@ -288,7 +288,7 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 - ≥60%（fairmint.json near_open）：消息第一行提醒，并当轮做完整审计（verify_source、riskcheck、query-token-audit、query-token-info、资金去向：国库抽成 ≤20%、储备不可提走、LP 入黑洞、无增发给自己），通过就写 fairmint/audit_ok.json {合约: {ok:true, token, note, time}}，不通过写 ok:false 和原因并告诉用户。
 - ≥70%：每轮跑 `python3 autofill.py`，只买 audit_ok=true、未开池、源码已验证的；五号各打满剩余额度（fair_buy.py <合约> <token> 999 --max 单价×1.1，精确授权 + preview）。
 - 预算：每天合计 100U（含当天 30U 规则已花的，较窄读法），账本 autofill.json；超额度不买只提醒。
-- 余额不够（insufficient/low_bnb）不自动换币，只在消息里提醒用户补 USDT/BNB，写清账号和差额。gas_topup 6U 规则照旧。
+- 余额不够时：BNB 计价的盘，autofill.py 打满前自动用 USDT 换够 BNB（用户 2026-11-01 02:45 原话「以后自动打满时 BNB 不够，也要自动用 U 换吗？ 要」，按该盘满额 + 0.0045 BNB 余量换），换完仍不够或 USDT 不足才提醒用户补，写清账号和差额。USDT 计价盘不够仍只提醒。gas_topup 6U 规则照旧。
 - 卖出规则不变（白天只提醒）。
 - TG 频道监控（2026-10-31 20:32 用户要求）：agentidcall + dashutiaozi（https://t.me/dashutiaozi），每轮 discover_all.sh 一起抓。
 
