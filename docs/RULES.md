@@ -253,3 +253,9 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 - 必须同时通过：verify_source.py 源码已验证；riskcheck + query-token-audit + query-token-info 无高危；项目方未满时不能提走资金（有 withdrawUnfilled/treasury 提款且无买家退款的跳过，如 FISTAGENT v2）；preview 干净（只扣 1 份价格 + gas，无授权变化）；买后 confirm.py 核对到账，写 auto_buy.json 和 positions。
 - 有免费份入口先领免费；邀请人填主账号 <MAIN_ADDR>（主账号自己不填）。
 - 卖出没有扩到白天：仓位仍只在 00:00–09:00 自动止盈止损，白天触发只提醒。
+
+## 可领取奖励自动领取（2026-10-31 18:26 用户原话「其他需要领取的也要自动领取」）
+- 每轮由 discover_all.sh 跑 `python3 claimscan.py`（只读，输出 discover_out/claimscan.json，巡逻必须读它并处理 candidates）：从 seen.json 已参与的合约和 extra_claim_targets.json 里，找无参数的领取类函数（claim/claimReward/harvest/getReward/claimDividend/claimAirdrop/release 等），用 eth_call(from=各账号) 模拟，能成功的列为候选。
+- 候选逐个跑 `python3 mint_many.py <合约> <calldata> <账号...>`：每号 preview，value=0、simulationCode 000000000、无授权/权限变化、risks 空、余额只增不减（除 gas）才 execute，并核对 receipt。
+- 只领属于我们地址的奖励/空投/分红/挖矿产出；不碰 unlock/withdraw 本金（用户单独要求的除外，如 Moribundus 祭坛由任务 4ad9da14 处理）、不卖、不转、不 approve；需要付费或签名的领取按原规则先问。
+- 新发现的可领合约（非 seen.json 来源）手动加进 extra_claim_targets.json。消息里写领到了什么、账号、tx 链接、到账状态。
