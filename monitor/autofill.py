@@ -44,7 +44,7 @@ def topup_bnb(need_bnb, bnbu):
 for row in FM.get('watch_unopened', []):
     a = row['contract'].lower(); v = FOUND.get(a, {})
     if row['open_pct'] < 70 or v.get('opened'): continue
-    if row.get('autofill_supported') is False: out['skipped'].append((row['name'], a, row['open_pct'], f"{row.get('template')} 模板，fair_buy.py 不支持，只提醒不自动打满")); continue  # 2026-11-01 审计：fairmint 新识别的 JAGENT/Boss/Mao 模板不进自动买
+    if row.get('autofill_supported') is False: out['skipped'].append((row['name'], a, row['open_pct'], f"{row.get('template')} 模板，fair_buy.py 不支持，只提醒不自动打满")); continue  # 2026-11-01 审计：份数固定 10（与 100U 预算一致，原 999 可能超额）；fairmint 新识别的 JAGENT/Boss/Mao 模板不进自动买
     if row.get('open_pct_guess'): out['skipped'].append((row['name'], a, row['open_pct'], '开池份数是自动猜的总量函数，只提醒不自动打满')); continue  # 2026-11-01 风控：猜的进度不触发自动买
     if (led.get('filled') or {}).get(a): continue
     ok = AOK.get(a)
@@ -61,7 +61,7 @@ for row in FM.get('watch_unopened', []):
     est = each * len(accs)
     if not DRY and not tu and v.get('cost_1share_bnb'):
         out.setdefault('swaps', []).extend(topup_bnb(v['cost_1share_bnb'] * 10 + 0.0045, BNBU))
-    res = subprocess.run(['python3', f'{D}/fair_buy.py', a, ok.get('token') or v.get('token'), '999', '--max', str(round(per_u * 1.1, 4))] + (['--dry'] if DRY else []) + accs,
+    res = subprocess.run(['python3', f'{D}/fair_buy.py', a, ok.get('token') or v.get('token'), '10', '--max', str(round(per_u * 1.1, 4))] + (['--dry'] if DRY else []) + accs,
                          capture_output=True, text=True, timeout=600).stdout
     lines = res.splitlines(); out['bought'].append({'name': row['name'], 'contract': a, 'open_pct': row['open_pct'], 'per_share_u': round(per_u, 3), 'result': lines})
     if any('insufficient' in l or 'low_bnb' in l for l in lines):
