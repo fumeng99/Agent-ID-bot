@@ -325,6 +325,13 @@ def main():
         else:
             found[a].update({k: v for k, v in i.items() if v is not None})
             if a in seen_now: found[a]['mints_in_scan'] = seen_now[a]['mints']
+    # 名称补读（2026-11-01 03:07 用户问「未命名」：首次批量读 token()/name() 偶发失败后一直为空）
+    for a in [a for a in targets if not found[a].get('name')]:
+        try:
+            r = info_many([a], code_cache={a: '0x'})[a]
+            for k2 in ('token', 'name', 'symbol'):
+                if r.get(k2): found[a][k2] = r[k2]
+        except Exception: pass
     # ④ 读不到开池份数的：自动找总量函数（只提醒）
     for a in targets:
         try: guess_cap(a, found[a])
