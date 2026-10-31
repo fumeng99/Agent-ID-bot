@@ -26,7 +26,11 @@ SKIP = {'0x60b9262456de011f7d15a54cdd8c48baaa8b022f', '0xbb4cdb9cbd36b01bd1cbaeb
         '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', '0xe9e7cea3dedca5984780bafc599bd69add087d56'}
 FREE_SELECTORS = {'0x1249c58b': 'mint()', '0x5b70ea9f': 'freeMint()', '0x4e71d92d': 'claim()', '0xa0712d68': 'mint(uint256)',
   '0x26092b83': 'publicMint()', '0x74d04cfc': 'commitFreeMint()', '0x9f92d0dd': 'registerForRewards()', '0x7c928fe9': 'freeMint(uint256)',
-  '0x379607f5': 'claim(uint256)', '0x8ab53447': 'mintFree()', '0xf366afc9': 'claimFree()', '0x1be3587a': 'agentMint()', '0x02acc94b': 'mint(uint256,uint256,uint256)'}
+  '0x379607f5': 'claim(uint256)', '0x8ab53447': 'mintFree()', '0xf366afc9': 'claimFree()', '0x1be3587a': 'agentMint()', '0x02acc94b': 'mint(uint256,uint256,uint256)',
+  # 2026-11-01 免费登记/领取（不铸币、只记名，regscan.py 用）：BossFreeRegister register() 漏发现后补
+  '0x1aa3a008': 'register()', '0xb688a363': 'join()', '0xb7bc0f73': 'signup()', '0xbf96ae63': 'signUp()', '0xe65f2a7e': 'enroll()',
+  '0x183ff085': 'checkIn()', '0xbaeb0718': 'checkin()', '0xd11711a2': 'participate()', '0x35eb5208': 'registerAgent()',
+  '0x3c679d67': 'joinWaitlist()', '0x5b88349d': 'claimAirdrop()'}
 
 
 def _load_json(path, default):
@@ -262,9 +266,12 @@ def main():
     devs = {k: v for k, v in devs.items() if any(x[1] >= now - 86400 for x in v)}
     st = {'last': last, 'toks': toks, 'checked': dict(list(done.items())[-3000:]), 'devs': devs, 'hashes': hashes, 'black': black, 'targets': dict(list(st.get('targets', {}).items())[-500:])}
     _save_json(STATE, st)
-    old = _load_json(OUT, [])
-    have = {c['token'] for c in old}; merged = old + [c for c in cands if c['token'] not in have]
-    _save_json(OUT, merged[-200:], ensure_ascii=False, indent=1)  # 巡逻处理后自行删除已处理项
+    import fcntl
+    with open(OUT + '.lock', 'w') as _lk:  # 2026-11-01：与 regscan.py 并行写 candidates.json，加锁防互相覆盖
+        fcntl.flock(_lk, fcntl.LOCK_EX)
+        old = _load_json(OUT, [])
+        have = {c.get('token') for c in old}; merged = old + [c for c in cands if c['token'] not in have]
+        _save_json(OUT, merged[-200:], ensure_ascii=False, indent=1)  # 巡逻处理后自行删除已处理项
     print(json.dumps({'head': head, 'scanned_to': last, 'blocks': last - start + 1, 'blocks_left': head - last, 'elapsed_s': round(time.time() - T_START, 1), 'block_time': round(bt, 3), 'log_errors': errors,
                       'tokens_in_window': len(toks), 'unchecked_left': pending, 'new_candidates': cands}, ensure_ascii=False, indent=1))
 if __name__ == "__main__": main()

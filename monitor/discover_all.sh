@@ -12,6 +12,7 @@ run() { # name timeout dir cmd...
     echo "$n exit=$rc ${t}s上限 用时=$(( $(date +%s)-s ))s" >> "$O/summary.txt" ) &
 }
 run chainscan 200 $D/chainscan env SCAN_BUDGET=60 python3 scan.py
+run regscan 110 $D/chainscan env REG_DEADLINE=95 python3 regscan.py  # 免费登记/领取（无 Transfer 事件，如 BossFreeRegister register()），候选同样并入 candidates.json
 run sitescan 110 $D python3 sitescan.py
 run tg 90 $D python3 tg/tgcall.py agentidcall dashutiaozi
 run platforms 90 $D python3 platforms/platforms.py

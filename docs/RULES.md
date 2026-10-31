@@ -9,7 +9,7 @@ contract-call calldata 编码示例：$AIDBOT_HOME/baw/enc.mjs（@noble/hashes k
 A. 免费 Mint 全自动：只自动铸造价格严格为 0、只耗 gas、无授权的项目（签名只限规则 C 的 EIP-712）。每个账号每笔都先 baw contract-call preview，干净（simulationCode 000000000、risks 全空、无 allowance/authority 变化、无代币/BNB 转出、只得 NFT/代币）才 execute；任何风险立即放弃并在消息里提醒用户。
 B. 源码必须公开：合约须在 Sourcify 或 BscScan 已验证源码（代理合约要查实现合约；用 verify_source.py 查，Sourcify 没有会自动查 BscScan/OKLink）；未公开源码，或项目方能直接提走用户资金的，直接跳过并在消息里告知用户（项目名、合约、原因）。「仅链上发现」的项目同样要过这一条。
 C. 签名：解题/面试型免费 Mint 允许用 baw sign-message 签 EIP-712 登录/激活消息（2026-10-31 03:26 用户原话「解题型 mint 允许签 EIP-712 这个可以」），条件：域名和合约与官网文档一致，只拿项目方签给本地址的 mint 授权，最终 mint 仍须 value=0 且 preview 干净。绝不签 personal_sign、permit、approve、setApprovalForAll 或任何可能转走资产的消息；签名类型不明就不签，在消息里单独告知用户。
-D. 付费项目：白天（09:00–24:00 CST）绝不自动买入，只报告。必须先跑官方 query-token-audit 和 query-token-info，把风险点、池子数据（流动性/价格）、持仓集中度写成简报；结尾「需要买请回复：确认买入 XX 金额 + 账号」。只有用户明确回复「确认买入 XX 金额」才执行，且执行前仍单独 preview。卖出同样只提醒，等用户确认。例外：夜间自动付费（2026-10-31 03:26 用户原话「恢复夜间自动买」）：每天 00:00–09:00 CST 可按第 6b 步自动买入并对这些仓位自动止盈止损，单笔 ≤5U、所有账号合计每天 ≤30U（含 gas），且必须同时满足规则 B（源码公开、项目方不能提走资金）、E、F（只精确额度授权，成交后归零）、G，并先跑 query-token-audit + query-token-info 无高危。
+D. 付费项目：白天（09:00–24:00 CST）绝不自动买入，只报告。必须先跑官方 query-token-audit 和 query-token-info，把风险点、池子数据（流动性/价格）、持仓集中度写成简报；结尾「需要买请回复：确认买入 XX 金额 + 账号」。只有用户明确回复「确认买入 XX 金额」才执行，且执行前仍单独 preview。卖出同样只提醒，等用户确认。例外：夜间自动付费（2026-10-31 03:26 用户原话「恢复夜间自动买」）：每天 00:00–09:00 CST 可按第 6b 步自动买入并对这些仓位自动止盈止损，单笔 ≤5U、每个号每天 ≤30U（含 gas；2026-11-01 03:38 用户原话「这个是单个号的才对」），且必须同时满足规则 B（源码公开、项目方不能提走资金）、E、F（只精确额度授权，成交后归零）、G，并先跑 query-token-audit + query-token-info 无高危。
 E. 每笔交易单独 preview，风险为 0 才执行；结果不确定的交易绝不重发，只按 orderId/txHash 核对。
 F. 禁止未经允许的 swap、改金额、改授权；只做精确金额授权。唯一允许的 swap 是用户此前明确授权的 gas_topup.py（BNB 不足时 6U USDT 换 BNB）。
 G. 每个钱包至少保留 0.003 BNB：execute 前确认「余额 − 本笔 gas」≥ 0.003 BNB，不够就先补 gas，补不了就跳过该号。
@@ -110,6 +110,7 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 - 输出 chainscan/candidates.json（累积列表）：token、name、mint_target（铸造要调用的合约）、selector、tx_values_wei、free_like、sample_txs。处理完把该项从 candidates.json 删掉并写进 seen.json。
 - 候选需再核：读 sample_txs 的 input 看参数（含别人地址/签名的不能照抄），去官网/官方 X 找来源；value 全为 0 才算 0 元。免费铸造常见函数：mint() 0x1249c58b、freeMint() 0x5b70ea9f、claim() 0x4e71d92d、mint(uint256) 0xa0712d68、publicMint() 0x26092b83、agentMint() 0x1be3587a。
 - 防钓鱼硬过滤：同一部署者 24h 内 ≥3 个不同名项目；部署者旧项目 48h 未开池或未回本就崩（拉黑）；同一份合约码 24h 部署 ≥3 次；部署钱包 <8 小时；付费进度需 ≥20 个不同钱包打出；两天前部署的老合约、已开池项目不再自动铸造。命中则不自动执行，只提醒。
+- 第二来源·免费登记/领取（2026-11-01 加 chainscan/regscan.py，由 discover_all.sh 并行跑，输出 discover_out/regscan.json）：BossFreeRegister（aiboss.fit，register() value=0）这类只记名、不铸币、没有 Transfer 事件的合约 scan.py 看不到。regscan 抽样扫同窗口全部日志，按发事件合约统计 30 分钟交易数（≥6 笔、排除代币/交易对等常见事件合约），合约码含登记合约或抽样调用者 ≥60% 持 .ai 即为候选，写进同一个 candidates.json，字段 source="register_event"、kind="free_register"（value=0）或 "paid_register"（只报）、contract/mint_target、selector、calldata（无参调用才有）、risk_flags/auto_ok。precheck.py 同时读它。巡逻第 2 步对它与 Transfer 候选一视同仁：仍须规则 B 源码验证、precheck、mint_many.py 每号 preview 干净才 execute；带参数（calldata 为空、flags 含「需 replay.py 核对」）的走 replay.py/第 5c 步，付费登记按规则 D。本条只新增发现来源，不放宽任何安全规则。
 
 ## 付费项目 60% 进度提醒（2026-10-30 17:55 用户要求）
 - 每轮对 seen.json/latest.json 里仍在铸造中的付费项目（含 Jager 克隆站：读 totalShares/上限或 costOf/walletStatus，或已售/上限函数；读不到则看铸造池剩余）读当前进度。
@@ -194,8 +195,8 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 ## 夜间自动付费进场与止盈止损（用户 2026-10-30 20:40 授权）
 - 用户原话：「改我不在的时间你自动来」「最多30u」。按最窄理解执行，用户另有说明再改。
 - 生效时段：每天 00:00–09:00 CST。时段外一律回到「付费必须用户回复确认买入 XX 金额」。
-- 额度：单笔 ≤ 5U；四个账号合计每天（CST 自然日）≤ 30U，含 gas 和授权费用。账本 $AIDBOT_DATA/auto_buy.json（{"YYYY-MM-DD": {"spent_u": x, "buys": [...]}, "positions": [...]}），买前先读、买后立刻写。超额就停止并在消息里说明。
-- 适用账号：accounts.json 里的全部账号（含 004，用户 2026-10-30 20:47 原话「加 新号自动加」：以后新登录的号自动加入免费自动打新和夜间付费）。30U/天为所有账号合计。同一项目全账号合计只投一次额度（不四号各买一份放大风险），除非单笔合计仍 ≤5U。
+- 额度：单笔 ≤ 5U；每个号每天（CST 自然日）≤ 30U（2026-11-01 03:38 用户更正为单个号，旧为合计），含 gas 和授权费用。账本 $AIDBOT_DATA/auto_buy.json（{"YYYY-MM-DD": {"spent_u": x, "buys": [...]}, "positions": [...]}），买前先读、买后立刻写。超额就停止并在消息里说明。
+- 适用账号：accounts.json 里的全部账号（含 004，用户 2026-10-30 20:47 原话「加 新号自动加」：以后新登录的号自动加入免费自动打新和夜间付费）。30U/天按每个号单独计算（用 quota.py 的 rule30_per_account_left_u 判断，某号到 30U 就只停该号）。同一项目全账号合计只投一次额度（不四号各买一份放大风险），除非单笔合计仍 ≤5U。
 - 只买同时满足的项目：Agent ID / 币安生态新项目；合约 Sourcify 已验证或官方来源确认；query-token-audit 与 Clawby 无高危；无增发/暂停/黑名单/改税/可升级代理后门；开池项目先模拟卖出不是貔貅、买卖税 ≤10%；部署者非重复克隆、非钓鱼硬过滤命中；preview simulationCode 000000000、risks 空；价格执行前重读，变动 >10% 重新预演。任何一项不确定就不买，只记简报。
 - 授权：只 approve 本笔精确额度，已有不足额度先归零，成交后归零；禁止无限授权、permit、setApprovalForAll、链下签名、transfer 给他人。
 - 止盈止损（只对本规则买入、记在 positions 里的仓位，时段内自动执行）：涨到 2 倍卖一半；从买入价跌 50% 全卖；开池后从高点回撤 50% 全卖。卖出用 baw market-order，slippage auto，失败 15% 重试一次。时段外触发时不自动卖，在巡逻消息里提醒「需要卖请回复：确认卖出 + 项目 + 账号」。
@@ -247,9 +248,9 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 - 2026-10-31 09:00 每日维护：Clawby、binance-skills-hub、baw CLI 均已是最新，无命令变化。
 - 2026-10-31 chainscan/scan.py 修复超时死循环：自带总时限 SCAN_DEADLINE（默认 150 秒，小于外层 timeout 200），到点前保存进度。输出新增 scanned_to / blocks_left / elapsed_s：blocks_left>0 表示还有区块留给下一轮接续扫描（不跳块），在消息里写一句即可，不算故障。
 
-## 付费分档 fair mint 全天自动买（2026-10-31 15:19 用户原话「白天也自动 改全天自动吧」，回应「Jager 这类每项目每号 1 份、合计每天 30U、能提走资金的跳过」的提议）
+## [已取消 2026-11-01 03:42 用户原话「还是按照60 70%来才对」：fair mint 进度 <70% 不自动买，只按 60% 提醒审计 / 70% 打满；「开铸快打」任务已暂停] 付费分档 fair mint 全天自动买（2026-10-31 15:19 用户原话「白天也自动 改全天自动吧」，回应「Jager 这类每项目每号 1 份、合计每天 30U、能提走资金的跳过」的提议）
 - 范围：只限付费分档 fair mint（jager.live / agentai.meme 及其克隆，fairmint.py 发现的合约）。其他付费项目仍是白天只报、夜间按「夜间自动付费」。
-- 全天 24 小时：每个项目每号 1 份（单笔 ≤5U），未开池才买；与夜间自动付费共用每天 30U 总额度（auto_buy.json，含 gas）。
+- 全天 24 小时：每个项目每号 1 份（单笔 ≤5U），未开池才买；与夜间自动付费共用每号每天 30U 额度（auto_buy.json，含 gas）。
 - 必须同时通过：verify_source.py 源码已验证；riskcheck + query-token-audit + query-token-info 无高危；项目方未满时不能提走资金（有 withdrawUnfilled/treasury 提款且无买家退款的跳过，如 FISTAGENT v2）；preview 干净（只扣 1 份价格 + gas，无授权变化）；买后 confirm.py 核对到账，写 auto_buy.json 和 positions。
 - 有免费份入口先领免费；邀请人填主账号 <MAIN_ADDR>（主账号自己不填）。
 - 卖出没有扩到白天：仓位仍只在 00:00–09:00 自动止盈止损，白天触发只提醒。
@@ -287,7 +288,7 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 - 开池进度 = 已铸 ÷ 开池份数（如前 1 万份），或募集 ÷ 开池 BNB，取大；不是总份数。
 - ≥60%（fairmint.json near_open）：消息第一行提醒，并当轮做完整审计（verify_source、riskcheck、query-token-audit、query-token-info、资金去向：国库抽成 ≤20%、储备不可提走、LP 入黑洞、无增发给自己），通过就写 fairmint/audit_ok.json {合约: {ok:true, token, note, time}}，不通过写 ok:false 和原因并告诉用户。
 - ≥70%：每轮跑 `python3 autofill.py`，只买 audit_ok=true、未开池、源码已验证的；五号各打满剩余额度（fair_buy.py <合约> <token> 999 --max 单价×1.1，精确授权 + preview）。
-- 预算：每天合计 100U（含当天 30U 规则已花的，较窄读法），账本 autofill.json；超额度不买只提醒。
+- 预算：每个号每天 100U（2026-11-01 03:40 用户原话「改每个号」，含该号当天 30U 规则已花的；超了只跳过该号），账本 autofill.json；超额度不买只提醒。
 - 余额不够时：BNB 计价的盘，autofill.py 打满前自动用 USDT 换够 BNB（用户 2026-11-01 02:45 原话「以后自动打满时 BNB 不够，也要自动用 U 换吗？ 要」，按该盘满额 + 0.0045 BNB 余量换），换完仍不够或 USDT 不足才提醒用户补，写清账号和差额。USDT 计价盘不够仍只提醒。gas_topup 6U 规则照旧。
 - 卖出规则不变（白天只提醒）。
 - TG 频道监控（2026-10-31 20:32 用户要求）：agentidcall + dashutiaozi（https://t.me/dashutiaozi），每轮 discover_all.sh 一起抓。
@@ -302,13 +303,14 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 固定顺序、分区标题、无关区块省略、不写口水话：
 【巡逻 HH:MM】
 ⚠️ 需处理（仅有时出现：开盘/60%/补款/掉线/卡住）
-▍账户：在线 5/5 ｜ BNB 主 x · 001 x · …（<0.005 标 ⚠️）
-▍交易：项目｜账号｜动作｜数量｜金额 U｜状态｜tx（无则「本轮无交易」）
-▍额度：30U 规则 已用 x/30 ｜ 打满 已用 x/100（一律用 `python3 quota.py` 的 line 字段；CST 00:00 重置，不沿用昨天数字、不手工加估算）
+▍账户：一律贴 `python3 balances.py` 的 line 字段（自动重试，失败写「查询失败」，不得写「未查到」后跳过）
+▍交易：每个项目一行「项目名｜账号数/账号｜动作｜金额 U｜状态｜合约链接」，tx 链接紧跟在该项目同一行或下一行，禁止把一串地址/tx 链接单独堆在一起而不写名称（无则「本轮无交易」）
+▍额度：30U/号 各号已用 ｜ 打满 100U/号（一律用 `python3 quota.py` 的 line 字段；CST 00:00 重置，不沿用昨天数字、不手工加估算）
 ▍持仓：项目｜买入价｜现价｜盈亏%｜距止损/止盈（有仓位才写）
 ▍Fair mint 进度（按开池进度降序，每行：项目 合约前6后4｜单价 U｜进度 %（已铸/开池份数）｜Δ本轮）
 ▍新项目 / 简报（有才写，每项：结论一句 + 关键数据 + 链接）
-▍跳过（项目｜原因）
+▍跳过（每行：项目名｜原因｜合约链接）
+▍付费铸造发现（sitescan 的 paid_mints，有才写；每行：站点｜合约链接｜单价 BNB 与 U｜源码是否验证/是否代理；只提醒，按付费规则等用户「确认买入」，不自动买）
 数字统一：U 保留 2 位，百分比 1 位，地址前 6 后 4，时间 CST。
 
 ## 免费候选预检（2026-11-01 00:50 新增，precheck.py）
@@ -378,3 +380,9 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 
 ### 已部署未开铸的写法（用户 2026-11-01 03:07 看不懂「未命名」列表）
 每个盘一行：名称（代号）— 链接，名称和链接写在一起，不要先列一串链接再列一串名字。名称读不到就当轮用 token() 再读 name()/symbol()，仍读不到才写「名称未读到」并说原因。
+
+## 2026-11-01 03:25 逻辑优化（用户原话「自动帮我优化当前逻辑和代码 策略」）
+- sitescan.py 新增 paid_mints：官网合约 mintPrice()/price()/cost()/MINT_PRICE()/PRICE()/publicPrice() >0 判为付费铸造，每合约只报一次，进推送「付费铸造发现」，只提醒不买（FAGENT 卡牌 0.002 BNB 漏报后加）。fagent.live 加入 watch_sites.txt。
+- fast_sell.py 100% 卖出后自动核对六号余额，全清零就从 auto_buy.json 移除该持仓并停掉该币的 price_trigger。
+- balances.py：推送账户行专用，批量查 BNB/USDT，失败自动重试一次。
+- 安全规则、额度、自动买卖范围均未改动。

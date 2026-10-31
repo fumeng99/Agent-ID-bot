@@ -51,7 +51,7 @@ def call(frm, to, data):
         return 'revert', errname(sel)
 
 def items():
-    d = load(os.path.join(D, 'discover_out/chainscan.json'), {})
+    d = [load(os.path.join(D, 'discover_out/chainscan.json'), {}), load(os.path.join(D, 'discover_out/regscan.json'), {})]  # 2026-11-01 加免费登记探测器
     out = []
     def walk(o):
         if isinstance(o, dict):
@@ -67,7 +67,7 @@ for c in items():
     if t in sold: continue
     if time.time() > DEADLINE: res.append({'name': c.get('name'), 'target': t, 'status': 'not_checked'}); continue
     sel = c.get('selector', '')
-    data = sel + ('1'.rjust(64, '0') if c.get('selector_name', '').endswith('(uint256)') else '')
+    data = c.get('calldata') or (sel + ('1'.rjust(64, '0') if c.get('selector_name', '').endswith('(uint256)') else ''))
     per = {}
     for a in ACC:
         st, why = call(a['bsc'], t, data); per[a.get('label') or a.get('name') or a['bsc'][:8]] = why if st != 'ok' else 'ok'
@@ -77,7 +77,7 @@ for c in items():
     paid = any(k in r for r in reasons for k in ('WrongPayment', 'InsufficientPayment', 'IncorrectPayment', 'InvalidPayment', 'insufficient'))
     status = 'mintable' if oks else ('soldout' if any('SoldOut' in r or 'sold out' in r.lower() for r in reasons) else ('paid' if paid else 'revert'))
     if status == 'soldout': sold[t] = {'name': c.get('name'), 'at': time.strftime('%Y-%m-%d %H:%M')}
-    res.append({'name': c.get('name'), 'target': t, 'selector': sel, 'status': status, 'ok_accounts': oks,
+    res.append({'name': c.get('name'), 'target': t, 'selector': sel, 'source': c.get('source', 'transfer_mint'), 'status': status, 'ok_accounts': oks,
                 'reasons': reasons, 'bscscan': c.get('bscscan')})
 
 order = {'mintable': 0, 'not_checked': 1, 'revert': 2, 'paid': 3, 'soldout': 4}
