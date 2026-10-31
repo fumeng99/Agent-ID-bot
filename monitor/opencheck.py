@@ -57,7 +57,12 @@ def bnb_usd():
             req = urllib.request.Request('https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT', headers={'User-Agent': 'Mozilla/5.0'})
             _BNB.append(float(json.load(urllib.request.urlopen(req, timeout=10))['price']))
         except Exception:
-            _BNB.append(0.0)
+            try:  # 币安 API 在本机所在地区被限制，回退用 DexScreener 的 WBNB 价格
+                req = urllib.request.Request('https://api.dexscreener.com/latest/dex/tokens/' + WBNB, headers={'User-Agent': 'Mozilla/5.0'})
+                ps = [p for p in json.load(urllib.request.urlopen(req, timeout=10)).get('pairs') or [] if p.get('chainId') == 'bsc' and p.get('baseToken', {}).get('address', '').lower() == WBNB]
+                _BNB.append(float(max(ps, key=lambda p: (p.get('liquidity') or {}).get('usd', 0))['priceUsd']))
+            except Exception:
+                _BNB.append(0.0)
     return _BNB[0]
 
 
