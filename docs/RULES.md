@@ -361,3 +361,8 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 ## 「⚠️ 需处理」只放真要用户动手的事（用户 2026-11-01 02:57 问「什么需要处理？」）
 - 只放：需要用户回复确认的（买入/卖出/签名）、要补钱（USDT/BNB 不足）、账号掉线要扫码、做不了要用户亲自操作的项目、持仓开盘且有明显盈亏需要决定卖不卖。每条写清「要你做什么」。
 - 纯信息（已部署未开铸、刚开铸且已自动买、开盘但价值 <1U、源码未验证而跳过）放「▍提醒」区，不放需处理。没有要用户动手的事就不出现「⚠️ 需处理」。
+
+### 学习笔记  v2.5.2–v2.5.3（2026-11-01 03:0x）
+- 采纳：BIBIAI LaunchPad（AGENT ID 那类）进度要用「已售 totalMinted / 开池份数 openThreshold」读，我们的 fair mint 扫描漏了它（EIP-1167 代理 + 非 Jager 模板）。platforms.py 新增 bibiai 来源（https://launch.bibiai.meme/api/projects），输出 bibiai（新盘/进度跳升）和 bibiai_hot（未开池且 ≥60%）。巡逻：bibiai 新盘放「▍提醒」并带项目页链接；bibiai_hot 按 60% 提醒规则做完整审计（verify_source 查实现合约、riskcheck、query-token-audit、query-token-info、treasury_bps≤2000、refund_deadline），需要买的放「⚠️ 需处理」等用户确认。BIBIAI 不在 autofill 自动打满范围内（不是 Jager/AGI 模板，源码未验证的照规则 B 跳过）。
+- 未采纳：照抄交易遇 MAX_COST 时把金额 +2%～+35% 逐步重试——这是自动改金额，违反规则 F，不移植。
+- 待用户决定：对方把门槛统一改 60% 且「付费必须合约内有退款（保本）函数才打」。我们已是 60% 提醒 / 70% 打满；退款函数要求是否加入自动买条件，等用户回复。

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent ID 内盘新币监控：Four.meme OpenFour Agent ID 专区（币安 pulse 榜）+ Gang.fun 新币。
+"""Agent ID 内盘新币监控：Four.meme OpenFour Agent ID 专区（币安 pulse 榜）+ Gang.fun 新币 + BIBIAI LaunchPad（2026-11-01 学  v2.5.3：AGENT ID 用 已售/开池份数 才读得到进度，我们 fair mint 扫描漏了它）。
 只读；输出上次以来新出现的币 + 进度跳升的币。状态存 state.json。用法: python3 platforms.py"""
 import json, os, time, urllib.request
 D = os.path.dirname(os.path.abspath(__file__)); SD = os.path.join(os.environ['AIDBOT_DATA'], 'platforms') if os.environ.get('AIDBOT_DATA') else D; os.makedirs(SD, exist_ok=True); ST = os.path.join(SD, 'state.json')
@@ -33,9 +33,24 @@ def gang():
                     'progress': x.get('progressPct'), 'creator': x.get('creatorHandle') or x.get('creator'), 'holders': x.get('holders'), 'fdv_usd': x.get('fdvUsd'), 'website': x.get('website'), 'twitter': x.get('twitter'),
                     'created': x.get('createdAt'), 'link': f'https://gang.fun/token/{ca}'})
     return out
+def bibiai():
+    d = get('https://launch.bibiai.meme/api/projects?limit=50&page=1'); out = []
+    for x in (d.get('data') or {}).get('items') or []:
+        ca = (x.get('mint') or '').lower()
+        if not ca: continue
+        thr = int(x.get('openThreshold') or 0); sold = int(x.get('totalMinted') or 0)
+        q = 'BNB' if x.get('nativePayment') else (x.get('quoteSymbol') or '')
+        out.append({'ca': ca, 'sym': x.get('symbol'), 'name': x.get('name'), 'progress': round(sold * 100 / thr, 1) if thr else None,
+                    'sold': sold, 'open_at': thr, 'opened': x.get('opened'), 'status': x.get('status'), 'paused': x.get('paused'),
+                    'price': int(x.get('price') or x.get('basePrice') or 0) / 1e18, 'quote': q, 'per_agent': x.get('agentQuota'),
+                    'token': x.get('token'), 'pair': x.get('pair'), 'treasury_bps': x.get('treasuryBps'), 'liquidity_bps': x.get('liquidityBps'),
+                    'buy_tax_bps': x.get('buyTaxBps'), 'sell_tax_bps': x.get('sellTaxBps'), 'renounced': x.get('renounced'),
+                    'refund_deadline': x.get('refundDeadline'), 'creator': x.get('creator'), 'holders': x.get('holderCount'), 'created': x.get('createdAt'),
+                    'link': f'https://launch.bibiai.meme/project/{ca}', 'bscscan': f'https://bscscan.com/address/{ca}'})
+    return out
 st = json.load(open(ST)) if os.path.exists(ST) else {}
 res = {'errors': []}
-for key, fn in [('four_new', lambda: four(10)), ('four_progress', lambda: four(20)), ('gang_new', gang)]:
+for key, fn in [('four_new', lambda: four(10)), ('four_progress', lambda: four(20)), ('gang_new', gang), ('bibiai', bibiai)]:
     try: rows = fn()
     except Exception as e: res['errors'].append(f'{key}: {e}'); continue
     seen = st.setdefault(key, {}); new, jump = [], []
@@ -44,6 +59,8 @@ for key, fn in [('four_new', lambda: four(10)), ('four_progress', lambda: four(2
         if r['ca'] not in seen: new.append(r)
         elif p - seen[r['ca']] >= 15: r['progress_prev'] = seen[r['ca']]; jump.append(r)
         seen[r['ca']] = p
+    if key == 'bibiai':  # 未开池且进度 ≥60% 的单独列出，巡逻按 60% 提醒 / 70% 打满规则处理
+        res['bibiai_hot'] = [r for r in rows if not r.get('opened') and (r.get('progress') or 0) >= 60]
     res[key] = {'total': len(rows), 'new': new if st.get('_init_' + key) else f'首次运行，记录 {len(new)} 个基线', 'jump': jump}
     st['_init_' + key] = 1
 json.dump(st, open(ST, 'w'))
