@@ -159,6 +159,15 @@ def guess_cap(a, v):
     sold = v.get('total_minted')
     if sold is None or v.get('open_at_shares') or v.get('open_bnb_bnb'): return
     if v.get('cost_1share_bnb') is None and not v.get('_has_minted_evt'): return  # 不像 fair mint（读不到单价、码里没有 Minted 事件）不猜
+    # 2026-11-01：Hallowed Agents 误报教训——ERC721 NFT 的 publicSupply 被当成开池份数。NFT 不是代币盘，没有开池，直接排除；顺手补项目名。
+    if 'is_nft' not in v:
+        r = call(a, '0x01ffc9a780ac58cd' + '0' * 56)
+        v['is_nft'] = bool(isinstance(r, str) and len(r) >= 66 and int(r, 16) == 1)
+    if not v.get('name'):
+        try: v['name'] = _str(call(a, '0x06fdde03')) or None
+        except Exception: pass
+    if v.get('is_nft'):
+        v.pop('cap_guess', None); v.pop('open_pct_guess', None); return
     if 'cap_sel' not in v:
         if time.time() > DEADLINE - 25: return
         code = (rpc('eth_getCode', [a, 'latest']) or '0x').lower()
@@ -327,6 +336,7 @@ def main():
         watch, near, just_opened, started = [], [], [], []; near_guess.clear()
         for a in set(targets):
             v = found[a]
+            if v.get('is_nft'): continue  # NFT 没有开池，不进开池进度
             op, guessed = open_pct(v)
             last = v.get('last_open_pct'); d = round(op - last, 2) if last is not None else 0
             row = {'contract': a, 'name': v.get('name'), 'cost_1share_bnb': v.get('cost_1share_bnb'), 'open_pct': op, 'delta_pct': d,
