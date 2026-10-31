@@ -28,6 +28,25 @@ FREE_SELECTORS = {'0x1249c58b': 'mint()', '0x5b70ea9f': 'freeMint()', '0x4e71d92
   '0x26092b83': 'publicMint()', '0x74d04cfc': 'commitFreeMint()', '0x9f92d0dd': 'registerForRewards()', '0x7c928fe9': 'freeMint(uint256)',
   '0x379607f5': 'claim(uint256)', '0x8ab53447': 'mintFree()', '0xf366afc9': 'claimFree()', '0x1be3587a': 'agentMint()'}
 
+
+def _load_json(path, default):
+    """容错读取：文件被写断（超时被杀）时备份坏文件并回退默认值，不让整轮扫描挂掉。"""
+    if not os.path.exists(path): return default
+    try:
+        return json.load(open(path))
+    except Exception:
+        try: os.replace(path, path + '.corrupt')
+        except Exception: pass
+        sys.stderr.write(f'WARN {path} 损坏，已备份为 .corrupt 并重建\n')
+        return default
+
+
+def _save_json(path, obj, **kw):
+    """原子写：先写临时文件再替换，进程中途被杀也不会留下半截 JSON。"""
+    tmp = path + '.tmp'
+    with open(tmp, 'w') as f: json.dump(obj, f, **kw); f.flush(); os.fsync(f.fileno())
+    os.replace(tmp, path)
+
 def rpc(m, p, tries=2):
     last = None
     for i in range(tries):
@@ -121,7 +140,7 @@ def new_wallet(dep, blk, bt):
     try: return int(rpc('eth_getTransactionCount', [dep, hex(max(1, blk - int(8 * 3600 / bt)))]), 16) == 0
     except Exception: return False
 def load_smart(head, bt):
-    sm = json.load(open(SMART_FILE)) if os.path.exists(SMART_FILE) else {}
+    sm = _load_json(SMART_FILE, {})
     if sm.get('built') and time.time() - sm['built'] < 86400: return set(sm['wallets'])
     if DEADLINE - time.time() < 90: return set(sm.get('wallets', []))  # 时间不够就沿用旧名单，下轮再重建
     cnt = {}
@@ -139,13 +158,13 @@ def load_smart(head, bt):
             if len(seen) >= 60: break
         for w in seen[:60]: cnt[w] = cnt.get(w, 0) + 1
     ws = [w for w, c in cnt.items() if c >= 2]
-    json.dump({'built': time.time(), 'wallets': ws}, open(SMART_FILE, 'w'))
+    _save_json(SMART_FILE, {'built': time.time(), 'wallets': ws})
     return set(ws)
 
 def main():
     mins = 35
     if '--minutes' in sys.argv: mins = int(sys.argv[sys.argv.index('--minutes') + 1])
-    st = json.load(open(STATE)) if os.path.exists(STATE) else {}
+    st = _load_json(STATE, {})
     head = int(rpc('eth_blockNumber', []), 16)
     hb = rpc('eth_getBlockByNumber', [hex(head), False]); pb = rpc('eth_getBlockByNumber', [hex(head - 1000), False])
     bt = max(0.2, (int(hb['timestamp'], 16) - int(pb['timestamp'], 16)) / 1000); now = int(hb['timestamp'], 16)
@@ -232,10 +251,10 @@ def main():
     hashes = {k: v for k, v in hashes.items() if any(x[1] >= now - 86400 for x in v)}
     devs = {k: v for k, v in devs.items() if any(x[1] >= now - 86400 for x in v)}
     st = {'last': last, 'toks': toks, 'checked': dict(list(done.items())[-3000:]), 'devs': devs, 'hashes': hashes, 'black': black}
-    json.dump(st, open(STATE, 'w'))
-    old = json.load(open(OUT)) if os.path.exists(OUT) else []
+    _save_json(STATE, st)
+    old = _load_json(OUT, [])
     have = {c['token'] for c in old}; merged = old + [c for c in cands if c['token'] not in have]
-    json.dump(merged[-200:], open(OUT, 'w'), ensure_ascii=False, indent=1)  # 巡逻处理后自行删除已处理项
+    _save_json(OUT, merged[-200:], ensure_ascii=False, indent=1)  # 巡逻处理后自行删除已处理项
     print(json.dumps({'head': head, 'scanned_to': last, 'blocks': last - start + 1, 'blocks_left': head - last, 'elapsed_s': round(time.time() - T_START, 1), 'block_time': round(bt, 3), 'log_errors': errors,
                       'tokens_in_window': len(toks), 'unchecked_left': pending, 'new_candidates': cands}, ensure_ascii=False, indent=1))
 if __name__ == "__main__": main()

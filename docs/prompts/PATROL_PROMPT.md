@@ -29,6 +29,7 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 RPC 限流：余额或链上查询遇到 429/5xx 时换节点重试（bsc-dataseed.bnbchain.org、bsc-rpc.publicnode.com、bsc.blockrazor.xyz、bsc-dataseed1.defibit.io 等），查不到就写「未查到」，绝不写「BNB 够用」。
 
 每次运行：
+0. 并行发现（每轮第一步，防止串行超时导致 2b/2c/2d/1f/2e 整轮没跑）：用 shell background 运行 `bash $AIDBOT_DATA/discover_all.sh`，它同时跑 chainscan、sitescan、TG、内盘平台、官网监控、fair mint、opencheck，约 200 秒内全部结束，输出在 discover_out/<步骤>.json，summary.txt 记每步 exit code。等待期间做第 1、1b 步。之后的 1e、1f、2、2b、2c、2d、2e 直接读 discover_out 里对应输出，不再重复运行脚本；某步 exit≠0 或输出为空时，单独重跑该步一次，仍失败就在消息里写步骤名和 .err 最后一行。
 1. 会话检查：对 accounts.json 里每个账号目录运行 `$AIDBOT_HOME/baw/safe_session.sh check <目录名>`。CONNECTED 或 UNKNOWN：当作可用。PENDING：跳过，提一句待扫码。UNCONNECTED（脚本已连续 3 次确认）：运行 `safe_session.sh signin <目录名>`，把配对码和 $AIDBOT_DATA/qr_<目录名>.png 交给用户，提醒该账号先在币安 App 切到对应账号再扫；该账号本轮不交易，其余继续。用户扫码后用 `safe_session.sh verify <目录名>` 核对 agentId。
 1b. 补 gas：运行 `python3 $AIDBOT_DATA/gas_topup.py`。有兑换就写账号、6U、orderId；USDT 不足或到当日上限就提醒用户充值。
 1c. 新号补领：accounts.json 里出现 seen.json 中从未记录过的账号时，先 `cd $AIDBOT_DATA && python3 backfill.py --dry`，再去掉 --dry 执行；成功的写回 seen.json。calldata 含签名/Merkle proof/时间戳的不能盲目替换地址，改走第 5c 步。
