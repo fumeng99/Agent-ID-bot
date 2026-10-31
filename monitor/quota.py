@@ -16,6 +16,7 @@ for b in a.get('buys', []):
     acc = b.get('accounts') or []
     if not acc: continue
     each = b['u_total'] / len(acc) if b.get('u_total') else float(b.get('bnb_each', 0)) * BNB_U
+    if b.get('gas_bnb_total') and not b.get('u_total_incl_gas'): each += float(b['gas_bnb_total']) * BNB_U / len(acc)  # 2026-11-01 审计：规则写「每号每天 ≤30U（含 gas）」，原来没算 gas
     for l in acc: per[l] = per.get(l, 0) + each
 s30 = float(a.get('spent_u', 0)); sfill = float(f.get('spent_u', 0))
 fill = dict(per)
@@ -26,4 +27,4 @@ print(json.dumps({'day_cst': day, 'rule30_per_account_used_u': {k: round(v, 2) f
                   'rule30_per_account_left_u': {k: round(max(0, 30 - v), 2) for k, v in per.items()},
                   'rule30_total_used_u': round(s30, 2),
                   'fill_per_account_used_u': {k: round(v, 2) for k, v in fill.items()}, 'fill_per_account_left_u': {k: round(max(0, 100 - v), 2) for k, v in fill.items()},
-                  'line': '30U/号 已用 ' + ' · '.join(f'{k} {v:.2f}' for k, v in per.items()) + '｜打满 100U/号 最高已用 ' + f'{max(fill.values()):.2f}'}, ensure_ascii=False))
+                  'line': '30U/号 已用 ' + ' · '.join(f'{k} {v:.2f}' for k, v in per.items()) + '｜打满 100U/号 已用 ' + ' · '.join(f'{k} {v:.2f}' for k, v in fill.items())}, ensure_ascii=False))

@@ -23,4 +23,6 @@ run claimscan 110 $D python3 claimscan.py 80  # 可领取奖励（只读）
 wait
 # 免费候选预检：依赖 chainscan 结果，所以放在 wait 之后
 ( s=$(date +%s); cd $D && timeout 100 python3 precheck.py > $O/precheck.json 2> $O/precheck.err; echo "precheck exit=$? 100s上限 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
+# 2026-11-01 审计：开池进度高频检查（只读 eth_call，5 秒左右）：跨 30/60/70%、提前开池、速度/预计到 70% 分钟数、待预审列表
+( s=$(date +%s); cd $D/fairmint && timeout 40 python3 fastprogress.py > $O/fastprogress.json 2> $O/fastprogress.err; rc=$?; cp $O/fastprogress.json $D/fairmint/fastprogress_last.json 2>/dev/null; echo "fastprogress exit=$rc 40s上限 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
 cat "$O/summary.txt"
