@@ -253,6 +253,7 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 - 必须同时通过：verify_source.py 源码已验证；riskcheck + query-token-audit + query-token-info 无高危；项目方未满时不能提走资金（有 withdrawUnfilled/treasury 提款且无买家退款的跳过，如 FISTAGENT v2）；preview 干净（只扣 1 份价格 + gas，无授权变化）；买后 confirm.py 核对到账，写 auto_buy.json 和 positions。
 - 有免费份入口先领免费；邀请人填主账号 <MAIN_ADDR>（主账号自己不填）。
 - 卖出没有扩到白天：仓位仍只在 00:00–09:00 自动止盈止损，白天触发只提醒。
+- 放宽（2026-10-31 19:20 用户原话「要」，回应「国库抽成 ≤20%、LP 入黑洞也可以自动买」）：每笔 Mint 当场固定比例（≤20%）转项目方国库/慈善、其余全部进开池储备且开池 LP 发往黑洞(0xdead)的，不算「项目方能提走资金」，可自动买；仍须源码验证、无高危、未开池、无 withdraw 储备/提走 LP/增发给自己的函数、preview 只扣精确金额。管理员能暂停合约在简报里写明但不单独作为跳过理由。抽成 >20%、储备能被 owner 提走、LP 不入黑洞的照旧跳过。
 
 ## 可领取奖励自动领取（2026-10-31 18:26 用户原话「其他需要领取的也要自动领取」）
 - 每轮由 discover_all.sh 跑 `python3 claimscan.py`（只读，输出 discover_out/claimscan.json，巡逻必须读它并处理 candidates）：从 seen.json 已参与的合约和 extra_claim_targets.json 里，找无参数的领取类函数（claim/claimReward/harvest/getReward/claimDividend/claimAirdrop/release 等），用 eth_call(from=各账号) 模拟，能成功的列为候选。
