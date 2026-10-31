@@ -246,3 +246,10 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 ## 技能更新记录
 - 2026-10-31 09:00 每日维护：Clawby、binance-skills-hub、baw CLI 均已是最新，无命令变化。
 - 2026-10-31 chainscan/scan.py 修复超时死循环：自带总时限 SCAN_DEADLINE（默认 150 秒，小于外层 timeout 200），到点前保存进度。输出新增 scanned_to / blocks_left / elapsed_s：blocks_left>0 表示还有区块留给下一轮接续扫描（不跳块），在消息里写一句即可，不算故障。
+
+## 付费分档 fair mint 全天自动买（2026-10-31 15:19 用户原话「白天也自动 改全天自动吧」，回应「Jager 这类每项目每号 1 份、合计每天 30U、能提走资金的跳过」的提议）
+- 范围：只限付费分档 fair mint（jager.live / agentai.meme 及其克隆，fairmint.py 发现的合约）。其他付费项目仍是白天只报、夜间按「夜间自动付费」。
+- 全天 24 小时：每个项目每号 1 份（单笔 ≤5U），未开池才买；与夜间自动付费共用每天 30U 总额度（auto_buy.json，含 gas）。
+- 必须同时通过：verify_source.py 源码已验证；riskcheck + query-token-audit + query-token-info 无高危；项目方未满时不能提走资金（有 withdrawUnfilled/treasury 提款且无买家退款的跳过，如 FISTAGENT v2）；preview 干净（只扣 1 份价格 + gas，无授权变化）；买后 confirm.py 核对到账，写 auto_buy.json 和 positions。
+- 有免费份入口先领免费；邀请人填主账号 <MAIN_ADDR>（主账号自己不填）。
+- 卖出没有扩到白天：仓位仍只在 00:00–09:00 自动止盈止损，白天触发只提醒。
