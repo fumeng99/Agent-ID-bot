@@ -7,7 +7,7 @@ contract-call calldata 编码示例：$AIDBOT_HOME/baw/enc.mjs（@noble/hashes k
 
 ## 最高优先级·用户安全规则（2026-10-31 03:22，覆盖本文件其他条款）
 A. 免费 Mint 全自动：只自动铸造价格严格为 0、只耗 gas、无授权的项目（签名只限规则 C 的 EIP-712）。每个账号每笔都先 baw contract-call preview，干净（simulationCode 000000000、risks 全空、无 allowance/authority 变化、无代币/BNB 转出、只得 NFT/代币）才 execute；任何风险立即放弃并在消息里提醒用户。
-B. 源码必须公开：合约须在 Sourcify 或 BscScan 已验证源码（代理合约要查实现合约）；未公开源码，或项目方能直接提走用户资金的，直接跳过并在消息里告知用户（项目名、合约、原因）。「仅链上发现」的项目同样要过这一条。
+B. 源码必须公开：合约须在 Sourcify 或 BscScan 已验证源码（代理合约要查实现合约；用 verify_source.py 查，Sourcify 没有会自动查 BscScan/OKLink）；未公开源码，或项目方能直接提走用户资金的，直接跳过并在消息里告知用户（项目名、合约、原因）。「仅链上发现」的项目同样要过这一条。
 C. 签名：解题/面试型免费 Mint 允许用 baw sign-message 签 EIP-712 登录/激活消息（2026-10-31 03:26 用户原话「解题型 mint 允许签 EIP-712 这个可以」），条件：域名和合约与官网文档一致，只拿项目方签给本地址的 mint 授权，最终 mint 仍须 value=0 且 preview 干净。绝不签 personal_sign、permit、approve、setApprovalForAll 或任何可能转走资产的消息；签名类型不明就不签，在消息里单独告知用户。
 D. 付费项目：白天（09:00–24:00 CST）绝不自动买入，只报告。必须先跑官方 query-token-audit 和 query-token-info，把风险点、池子数据（流动性/价格）、持仓集中度写成简报；结尾「需要买请回复：确认买入 XX 金额 + 账号」。只有用户明确回复「确认买入 XX 金额」才执行，且执行前仍单独 preview。卖出同样只提醒，等用户确认。例外：夜间自动付费（2026-10-31 03:26 用户原话「恢复夜间自动买」）：每天 00:00–09:00 CST 可按第 6b 步自动买入并对这些仓位自动止盈止损，单笔 ≤5U、所有账号合计每天 ≤30U（含 gas），且必须同时满足规则 B（源码公开、项目方不能提走资金）、E、F（只精确额度授权，成交后归零）、G，并先跑 query-token-audit + query-token-info 无高危。
 E. 每笔交易单独 preview，风险为 0 才执行；结果不确定的交易绝不重发，只按 orderId/txHash 核对。
