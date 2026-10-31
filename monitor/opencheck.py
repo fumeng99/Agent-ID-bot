@@ -50,6 +50,17 @@ def gecko(t):
         return None
 
 
+_BNB = []
+def bnb_usd():
+    if not _BNB:
+        try:
+            req = urllib.request.Request('https://api.binance.com/api/v3/ticker/price?symbol=BNBUSDT', headers={'User-Agent': 'Mozilla/5.0'})
+            _BNB.append(float(json.load(urllib.request.urlopen(req, timeout=10))['price']))
+        except Exception:
+            _BNB.append(0.0)
+    return _BNB[0]
+
+
 USD1 = '0x8d0d000ee44948fc98c9b98a4fa4921476f08b0d'
 QUOTES = (WBNB, USDT, USD1)  # V2 池子常见报价币（学 v2.3.5：BNB/USDT 以外的配对也要查到）
 
@@ -97,8 +108,16 @@ for i, (x, t) in enumerate(items):
     per = {}
     for a, r in zip(A, seg[:len(A)]):
         if ok(r) and int(r, 16): per[a['label']] = int(r, 16) / 10 ** dec
+    val = round(sum(per.values()) * float(ds['price_usd']), 2) if ds.get('price_usd') else None
+    # 盈亏（用户 2026-11-01 02:49 要求：开盘告诉我合约、赚了还是亏了）。成本取 seen 的 cost_usd，或 cost_bnb×BNB 价；免费铸造按 0。
+    cost = x.get('cost_usd')
+    if cost is None and x.get('cost_bnb') is not None: cost = float(x['cost_bnb']) * bnb_usd()
+    if cost is None and str(x.get('type', '')).startswith('free'): cost = 0.0
+    pnl = round(val - cost, 2) if (val is not None and cost is not None) else None
+    pct = round(pnl / cost * 100, 1) if (pnl is not None and cost) else None
     new.append({'name': x.get('name'), 'contract': x['contract'], 'token': t, 'held_by_account': per, 'held_total': sum(per.values()),
-                'value_usd': round(sum(per.values()) * float(ds['price_usd']), 2) if ds.get('price_usd') else None, **ds})
+                'value_usd': val, 'cost_usd': round(cost, 2) if cost is not None else None, 'pnl_usd': pnl, 'pnl_pct': pct,
+                'verdict': None if pnl is None else ('赚' if pnl > 0 else '亏' if pnl < 0 else '持平'), **ds})
     if not DRY: x['open_alerted'] = True; x['opened_info'] = ds
 
 if new and not DRY: json.dump(S, open(SEEN, 'w'), ensure_ascii=False, indent=1)
