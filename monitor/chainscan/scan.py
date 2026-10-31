@@ -79,11 +79,18 @@ def impl_of(a):
             r = call('0x' + v[-40:], '0x5c60da1b'); return '0x' + r[-40:]
     except Exception: pass
     return None
+sys.path.insert(0, os.path.dirname(D)); import codeutil as CU  # 2026-11-01 学  v2.4.0：代理一律追到底
 def has_registry(a):
     c = code(a)
     if REGISTRY in c: return True
     i = impl_of(a)
-    return bool(i and REGISTRY in code(i))
+    if i and REGISTRY in code(i): return True
+    try:  # EIP-1167 最小代理、合约码里写死的 Beacon/实现地址（FAGENT/Flap Agent Card 这类以前会漏）
+        return REGISTRY in CU.full_code(rpc, lambda to, d: _safe_call(to, d), a, c)
+    except Exception: return False
+def _safe_call(to, d):
+    try: return call(to, d)
+    except Exception: return None
 def holds_ai(w):
     try: return int(call('0x' + REGISTRY, '0x70a08231' + w[2:].rjust(64, '0'))[:66], 16) > 0
     except Exception: return False
@@ -246,7 +253,9 @@ def main():
         if sel in BAD_SEL: flags.append('选择器是转账/授权类，不可照抄')
         cands.append({'token': a, 'name': tstr(a, '0x06fdde03'), 'symbol': tstr(a, '0x95d89b41'), 'wallets_30m': len(ws),
                       'agentid': agentid, 'ai_holders': f'{ai_n}/{len(sample)}', 'mint_target': target, 'selector': sel,
-                      'selector_name': FREE_SELECTORS.get(sel, ''), 'tx_values_wei': values, 'free_like': bool(values) and max(values) == 0,
+                      'selector_name': FREE_SELECTORS.get(sel, '') or ('直接转BNB铸造(input为空，付费)' if sel == '0x' and values and max(values) > 0 else ''),
+                      'plain_bnb_mint': sel == '0x' and bool(values) and max(values) > 0,  # 2026-11-01 学 v2.4.7：别人直接转 BNB 给合约就铸造，没有 calldata 可抄；按付费处理
+                      'plain_bnb_value_wei': max(set(values), key=values.count) if sel == '0x' and values else None, 'tx_values_wei': values, 'free_like': bool(values) and max(values) == 0,
                       'sample_txs': txs[:3], 'smart_wallets': smart_n, 'deployer': dep, 'created_block': cb, 'risk_flags': flags, 'auto_ok': not flags, 'bscscan': f'https://bscscan.com/token/{a}',
                       'found_at_cst': time.strftime('%Y-%m-%d %H:%M', time.gmtime(now + 8 * 3600))})
     hashes = {k: v for k, v in hashes.items() if any(x[1] >= now - 86400 for x in v)}

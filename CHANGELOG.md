@@ -7,6 +7,15 @@
 ### 新增
 - `monitor/precheck.py`：免费 mint 候选预检（只读 `eth_call`），五号逐一模拟并解码自定义错误（如 `SoldOut()`、`WrongPayment()`），按可铸 / 付费 / 售罄 / 其他排序；售罄写入本地黑名单不再重试。`discover_all.sh` 在发现步骤结束后自动运行。
 - `monitor/quota.py`：按北京时间自然日输出当日 30U 与 100U 额度用量，作为推送「额度」一栏的唯一来源。
+- `monitor/fairmint/fairmint.py`「已部署未开铸」预警：扫 PancakeV2 `PairCreated`，对在部署交易里建池的新代币，按 `CREATE(部署者, nonce)` 推算同一部署者前后部署的合约，合约码含 Agent ID 登记合约且含 `Minted` 事件 / `costOf` 的即加入观察（`premint_new`），开铸时输出 `mint_started`；其他新部署的 Agent ID 合约输出 `agentid_deployed`。部署者盯 48 小时，已知 fair mint 的部署者同样盯。
+- `monitor/codeutil.py`：代理合约追到底（EIP-1967、Beacon、EIP-1167、合约码内写死的实现地址）、CREATE 地址推算、自动找总量函数、退款函数检测。
+- `monitor/riskcheck.py` 新增 `upgradeable_proxy`、`has_refund` 参考字段，`--mint <合约>` 同时检查 fair mint 合约。
+
+### 变更
+- `fairmint.py` 改为批量 JSON-RPC：未开池项目每轮全部刷新（原为最近 15 个），开池进度 50–70% 或刚开铸的项目在本轮剩余时间内每 20 秒重读；读不到开池份数时自动猜总量函数，结果单独列为 `near_open_guess`，`autofill.py` 不据此自动打满。
+- `opencheck.py` 在 DexScreener 无数据时改查 GeckoTerminal，V2 报价币增加 USD1；`chainscan/scan.py` 识别「直接转 BNB 铸造」并按付费处理。
+- `price_trigger.py` 价格取流动性最大的池子，连续两次触发才卖出。
+- `discover_all.sh` 加文件锁，同一时间只运行一份。
 
 ### 修复
 - 跨日后推送仍显示前一日额度用量的问题。

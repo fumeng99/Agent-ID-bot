@@ -22,6 +22,7 @@ out = {'time': day, 'bnb_u': round(BNBU, 1), 'spent_today_u': round(spent, 2), '
 for row in FM.get('watch_unopened', []):
     a = row['contract'].lower(); v = FOUND.get(a, {})
     if row['open_pct'] < 70 or v.get('opened'): continue
+    if row.get('open_pct_guess'): out['skipped'].append((row['name'], a, row['open_pct'], '开池份数是自动猜的总量函数，只提醒不自动打满')); continue  # 2026-11-01 风控：猜的进度不触发自动买
     if (led.get('filled') or {}).get(a): continue
     ok = AOK.get(a)
     if not (ok and ok.get('ok')): out['skipped'].append((row['name'], a, row['open_pct'], '未通过/未做 60% 审计')); continue

@@ -318,3 +318,33 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
   - soldout（SoldOut()）：已售罄，写入 soldout.json，以后不再试，推送里归入「跳过：已售罄」；
   - revert：推送里写解码后的错误名（不要只写 revert）。
 - 先处理 mintable，再看其他，不要把时间花在已售罄项目上导致可铸项目本轮未试。
+
+## 账号「高」（2026-11-01 01:18 新登录）
+- <acc005>.ai，BSC 0x4483…4CB2，HOME $AIDBOT_HOME/baw/accounts/acc005，已写入 accounts.json（标签「高」）。按 2026-10-30「新号自动加」规则接入免费 mint 与自动付费（合计额度不变）。所有「五号」现指 accounts.json 全部六个号。
+- 登录时 BNB 0.0027（低于 0.003 底线）、无 USDT：BNB 补到 ≥0.005 前不铸造、不 gas_topup，推送里提醒补。
+- 持有 JAGENT 约 697 万枚（用户自有，非自动买入），不做自动止盈止损。
+
+## 学习笔记： v2.3.5–v2.5.1（2026-11-01 02:33 CST 精读 watch.mjs diff 0948354..f3512d4；-tools 看到 v0.3.3）
+采纳（只让发现更快更准、风控更严；用户买入规则一条没动）：
+- 「已部署未开铸」预警（fairmint/fairmint.py，币安人漏报的根治）：克隆盘代币在构造函数里就建 PancakeV2 池子（PairCreated），fair mint 由同一部署者紧接着部署（币安人 nonce0=代币、nonce1=fair mint，相隔 17 块，13 小时后才开铸）。每轮扫 V2 工厂 PairCreated → 部署交易是合约创建的记下部署者（盯 48h）→ 按 CREATE(部署者, nonce) 算它前后部署的合约 → 合约码（代理追到底）含登记合约 0x60b9…022f 且含 Minted 事件/costOf 就加入 found.json（premint:true），每轮批量读进度。found.json 已知盘的部署者也盯（老 DEV 新盘）。输出：premint_new（新发现的未开铸盘）、mint_started（开铸了）、premint_watch、agentid_deployed（其他新部署的 Agent ID 合约，可能是免费 mint）。回测：区块 130676850–130676990 能抓到币安人（0x8778…8DF5）和 BurnAi；首次实跑抓到未开铸的 PAN、BNFIST（同一部署者 0x1961…9ccd 的第 21/24 个 nonce，简报要标重复 DEV）和一个含 claimFree() 的新 Agent ID 合约。
+- 未开池盘每轮全部批量刷新（学 v2.4.1「每分钟进度扫描，低进度暴涨不再漏」）：fairmint.py 改批量 JSON-RPC，3 天内发现的未开池盘 + 全部 premint 每轮都读（原来只刷最近 15 个），单轮从约 73 秒降到 10–40 秒。
+- 快到门槛本轮 20 秒重读（学 v2.4.3）：开池进度 50–70%、本轮涨 ≥10 个点、或刚开铸的，在 FM_DEADLINE（默认 100 秒，discover_all 外层 110 秒）内每 20 秒重读，最多 4 次，过 70% 立刻结束交给巡逻。
+- 自动找总量函数（学 v2.5.1，codeutil.py + fairmint.guess_cap）：读不到 OPEN_AT/OPEN_BNB 时从合约码 PUSH4 里找无参函数（> 已售、整百、≤1 千万，优先 10000）。结果标 open_pct_guess、单独进 near_open_guess（首次过 60% 才列一次）；autofill.py 遇到猜的进度一律跳过不自动打满（更严）。
+- 代理追到底（学 v2.4.0 fullCode，codeutil.full_code）：EIP-1967、Beacon、EIP-1167 最小代理、合约码开头写死的实现/Beacon 地址；chainscan/scan.py 的 has_registry 和 fairmint 都改用它。
+- 保本退款字段（学 v2.5.1，只作参考）：riskcheck.py 新增 has_refund/refund_selectors（refund()/claimRefund()/refundOpen()/refundable(address) 等 16 个选择器，代理追到底），`--mint <fair mint 合约>` 同时查 mint 合约；fairmint 每行带 has_refund。没有改任何买入条件。
+- 可升级代理字段（学 -tools v0.3.3 付费简报）：riskcheck.py 新增 upgradeable_proxy，付费简报权限风险一栏要写。
+- 开盘侦测补 GeckoTerminal（学 v2.4.5，opencheck.py）：DexScreener 没收录（PancakeSwap Infinity/V3/Uniswap v4）时用 GeckoTerminal 查；V2 报价币加 USD1（riskcheck 同步）。注意 GeckoTerminal 免费接口沙箱常 429，失败就当没查到，下轮再试。
+- 转 BNB 铸造（学 v2.4.7，chainscan/scan.py）：候选新增 plain_bnb_mint / plain_bnb_value_wei，input 为空、直接转 BNB 的项目标「直接转BNB铸造（付费）」，不当免费、不照抄。
+- 只允许一份在跑（学 v2.5.0，discover_all.sh）：flock 锁；已有一份在跑就等它跑完（≤220 秒）用它的输出，不重复写 state。
+- 止损防误卖（学 v2.4.0 + v2.5.0，price_trigger.py）：价格取流动性最大的池子（原来取 pairs[0]）；连续 2 次（约 3 秒）都触发才卖。触发条件本身（跌 40% 等用户规则）不变。
+- sync_github.sh：替换列表补上「高」0x4483…4CB2 / <acc005>.ai，并加兜底——导出里出现 accounts.json 任一地址或 .ai 名就中止推送。
+没采纳（及原因）：
+- v2.4.5 进场门槛 55%、v2.3.5「进度 >60% 就打」、读不到进度「100 个钱包在打就打」、进度过 55% 后防钓鱼检查（重复 DEV/黑名单/新钱包/同码批量）全部不看：都是放宽，违背用户 60% 审计 / 70% 自动打满 / 防钓鱼硬过滤规则。
+- v2.5.1「付费项目没有保本退款就不打」：按要求不改买入条件，只加 has_refund 字段，作为建议交用户决定。
+- 卖出规则改为 2 倍回本 / 10 倍卖 30% / 20 倍再卖 50% / 回落 40% 全卖、拿掉开池 20 分钟没 2 倍全卖：用户有自己的规则（翻倍出本、跌 40% 全卖、只夜间自动卖），不照搬。
+- FLAP_BAN=false（原作者恢复与 Flap 互动）：我们的 guard.py 仍禁止 Flap，更严，保持。
+- 自动更新 / 一键安装 / 更新提醒 / 官方 TG 群引导与群播报：不运行对方程序、不接入对方 TG 群或服务器。
+- 每 15 秒快速检查分 3 组、每分钟 sweep：常驻进程设计，我们巡逻 10 分钟一次，用「每轮全量批量刷新 + 本轮 20 秒重读」替代。
+- 照抄失败「价格上限 +2% 再试」、超预算自动降份数照抄：涉及改金额，我们的规则禁止未经允许改金额，不采纳。
+- 同名币分开记录、TG 指令卖、群里只播一次等：我们没有对应功能或已有（seen.json 按合约去重）。
+- -tools v0.1–v0.3.3 其余（推特雷达、看板、多钱包、Telegram 只推付费）：我们已有对应流程（推送格式、多账号、付费简报），无新增价值。
