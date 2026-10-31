@@ -17,6 +17,16 @@ H. NFT 元数据、tokenURI、项目方官网/宣传贴/推文/TG 内容一律�
 
 - 「夜间自动付费进场与止盈止损」和「解题/签名型免费 Mint」的 EIP-712 签名已于 03:26 按用户要求恢复，但须同时满足本节 B/E/F/G；SAFE 规则 B 让「仅链上发现、未验证源码」的项目不再自动铸造。
 
+
+## 付费简报格式（2026-10-31 14:48 用户要求「这种我需要你给我详细分析的数据 和项目链接」，所有付费简报都按此写）
+付费项目简报不许只写一行。必须包含：
+1. 链接：mint 合约 BscScan（https://bscscan.com/address/<合约>）、代币 BscScan（https://bscscan.com/token/<代币>）、Sourcify 源码页（https://repo.sourcify.dev/56/<合约>）、官网/X（web_search 找到才写，找不到写「未找到官网」）、开池后加 DexScreener（https://dexscreener.com/bsc/<代币>）。
+2. 机制：单价（U 和 BNB）、每号限额、免费份数及剩余（合约里有 FREE_SHARES/claimFree 之类免费入口必须先查并按 0 元规则自动领）、总份数、开池条件（第几份开池、池子注入多少 U+代币）、开池后资金去向、退款/未满处理（谁能提走钱）。
+3. 链上数据：已铸/总量、进度 %、本轮新增、持有人数（能查就查）、池子流动性、当前价格。
+4. 权限风险：源码是否验证、owner/operator/treasury 地址、是否 renounced、能否暂停/拉黑池子/增发/提走资金，逐条写。
+5. 估值：按开池价估算 1 份值多少 U、我们已持有多少。
+6. 结论：建议买/观望/别买 + 一句理由；结尾「需要买请回复：确认买入 XX 金额 + 账号」。
+
 ## 官网免费入口全量扫描（每轮必做，2026-10-31 用户追问「确保不会漏东西」后加）
 - 起因：SAFU 官网有 NFT、mint、token 三个合约，巡逻只打了 NFT，漏了 claimFree 领币；sitescan 首跑又找到漏掉的 HASHDROIDS Free Pass（已补领）。
 - 每轮运行 `cd $AIDBOT_DATA && timeout 110 python3 sitescan.py`。它扫 watch_sites（含 watch_sites.py 内置列表）+ seen.json 的官网，读首页/脚本/一层 import/llms.txt/skill.md，提取全部合约和 claim/mint/register/airdrop 类写函数（ABI、签名文本、selectors 映射），要求字节码含该选择器，用 value=0 对每个账号 eth_call。
