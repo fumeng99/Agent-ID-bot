@@ -4,6 +4,9 @@
 
 ## [2026-11-01]
 
+### 变更
+- `monitor/fairmint/fairmint.py`：猜测总量小于已售（超卖）时按卖完 100% 计，不再丢弃（参考社区同类工具的超卖修正；仅影响提醒）。
+
 ### 新增
 - `monitor/precheck.py`：免费 mint 候选预检（只读 `eth_call`），五号逐一模拟并解码自定义错误（如 `SoldOut()`、`WrongPayment()`），按可铸 / 付费 / 售罄 / 其他排序；售罄写入本地黑名单不再重试。`discover_all.sh` 在发现步骤结束后自动运行。
 - `monitor/quota.py`：按北京时间自然日输出当日 30U 与 100U 额度用量，作为推送「额度」一栏的唯一来源。

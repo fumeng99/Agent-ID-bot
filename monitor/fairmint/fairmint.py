@@ -292,7 +292,8 @@ def guess_cap(a, v):
         v['cap_sel'] = '0x' + cand[0][0] if cand else ''
     if v.get('cap_sel'):
         cap = _int(call(a, v['cap_sel']))
-        if cap and cap > 0 and cap >= sold:
+        if cap and cap > 0:
+            cap = max(cap, sold)  # 学 v2.5.4：已售超过总量＝卖完（AID 10246/10000 曾被读成 0.23%）
             v['cap_guess'] = cap; v['open_pct_guess'] = round(sold * 100 / cap, 2)
 
 
