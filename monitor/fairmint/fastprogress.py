@@ -114,6 +114,12 @@ def step(found, st, aok):
             s['alerted'].append('auto_audit'); out.setdefault('auto_audit_started', []).append(a)
             import subprocess
             subprocess.Popen(['bash', '-c', f'cd {D} && timeout 150 python3 autoaudit.py {a} >> {L}/discover_out/autoaudit.log 2>&1'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # 2026-11-01 19:27 BNBHolder：自动审计因「源码未验证」不通过的热盘，开池前每 2 分钟重跑一次只读审计（项目方常在开铸后才验证源码）；人工结论不动
+        _ao = aok.get(a) or {}
+        if _ao.get('auto') and not _ao.get('ok') and '未验证' in str(_ao.get('note', '')) and tpl == 'jager' and pct < 100 and time.time() - s.get('reaudit_at', 0) >= 120:
+            s['reaudit_at'] = time.time(); out.setdefault('auto_audit_started', []).append(a)
+            import subprocess
+            subprocess.Popen(['bash', '-c', f'cd {D} && timeout 150 python3 autoaudit.py {a} >> {L}/discover_out/autoaudit.log 2>&1'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         # 2026-11-01 安小将教训：已审计通过、还没到 70% 的热盘 = armed，主循环不因 urgent 退出，继续 5 秒盯到 70% 触发快速通道
         if pct < 70 and (aok.get(a) or {}).get('ok') and 'fastfill' not in s['alerted'] and (pct >= 30 or (rate or 0) >= 3):
             out.setdefault('armed', []).append(a)

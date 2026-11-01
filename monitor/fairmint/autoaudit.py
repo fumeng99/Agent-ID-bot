@@ -85,11 +85,12 @@ def audit(m):
 def main():
     res = {}
     for m in [x.lower() for x in sys.argv[1:] if x.startswith('0x')]:
-        if m in load(AOK, {}): res[m] = 'exists'; continue
+        _e = load(AOK, {}).get(m)
+        if _e and not (_e.get('auto') and not _e.get('ok')): res[m] = 'exists'; continue  # 只允许重审之前「自动不通过」的；人工结论和通过结论不动
         r = audit(m); r['time'] = time.strftime('%Y-%m-%d %H:%M CST', time.gmtime(time.time() + 8 * 3600))
         with open(AOK + '.lock', 'w') as lk:
             fcntl.flock(lk, fcntl.LOCK_EX); a = load(AOK, {})
-            if m not in a:
+            if m not in a or (a[m].get('auto') and not a[m].get('ok')):
                 a[m] = r; json.dump(a, open(AOK + '.tmp', 'w'), ensure_ascii=False, indent=1); os.replace(AOK + '.tmp', AOK)
         res[m] = r
     print(json.dumps(res, ensure_ascii=False))
