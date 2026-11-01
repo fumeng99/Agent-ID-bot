@@ -96,6 +96,10 @@ def step(found, st, aok):
                 s['alerted'].append(lvl); out['crossings'].append(dict(row, level=lvl, from_pct=round(prev[1] * 100 / oa, 2) if prev else None))
                 if lvl >= 60: out['urgent'] = True
         if pct >= MIN or (row['eta_70_min'] is not None and row['eta_70_min'] <= 30):
+            if pct >= 50:  # B1 预热：提前把 Agent ID 铸造钱包数算进缓存，70% 时 autofill 不用临时扫
+                try:
+                    import minters as _MN; row['ai_minters'] = (_MN.ai_minters(a, budget=8) or {}).get('ai_minters')
+                except Exception: pass
             out['hot'].append(row)
             if a not in aok: out['pre_audit'].append({'contract': a, 'name': nm, 'open_pct': pct, 'bscscan': row['bscscan']})
         if row['eta_70_min'] is not None and row['eta_70_min'] <= 5: out['urgent'] = True

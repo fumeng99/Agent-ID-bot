@@ -66,6 +66,13 @@ for row in FM.get('watch_unopened', []):
             except Exception: return 0
         sib = {x.get('name') for x in FOUND.values() if x.get('deployer') == dep and time.time() - _t(x) < 86400}
         if len(sib) >= 3: out['skipped'].append((row['name'], a, row['open_pct'], f'部署者 {dep[:6]}…{dep[-4:]} 24 小时内发了 {len(sib)} 个不同名字的盘，疑似批量发盘，不自动打满')); continue
+    # ④ B1（用户 2026-11-01 16:47「按照你推荐来」）：至少 100 个持 .ai 身份的不同钱包在打，防项目方自己灌进度；读不到当不达标
+    try:
+        sys.path.insert(0, f'{D}/fairmint'); import minters as _MN
+        mr = _MN.ai_minters(a, v.get('deploy_block'), budget=30)
+    except Exception as ex: mr = None
+    if not mr or mr['ai_minters'] < 100:
+        out['skipped'].append((row['name'], a, row['open_pct'], f"Agent ID 铸造钱包不足 100（{'读不到' if not mr else str(mr['ai_minters']) + ' 个，共 ' + str(mr['minters']) + ' 个地址'}），疑似自灌进度，不自动打满")); continue
     # ② 保本：合约有退款函数，或者链上实测资金真的留在开池储备（pendingBnb ≥ 已募资 75%，即国库抽成 ≤20% 加少量误差）。两者都没有不打满。
     pb, tp = v.get('pending_bnb_bnb'), v.get('total_paid_bnb')
     reserve_ok = bool(pb and tp and pb >= 0.75 * tp)
