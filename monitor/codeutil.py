@@ -71,7 +71,16 @@ def full_code(rpc, call, a, code=None, depth=0):
     if h.startswith('363d3d373d3d3d363d73') and len(h) >= 60: targets.append('0x' + h[20:60])  # EIP-1167 最小代理
     if len(code) < 4000:  # 小合约：开头写死的 Beacon/实现地址（PUSH20 / PUSH32 填充）
         import re
-        emb = re.findall(r'7f000000000000000000000000([0-9a-f]{40})', h[:1200]) + re.findall(r'73([0-9a-f]{40})', h[:1200])
+        emb = []; hh = h[:1200]; i = 0  # 按字节码逐条解析，避免错位匹配
+        while i + 42 <= len(hh):
+            op = hh[i:i+2]
+            if op == '73': emb.append(hh[i+2:i+42]); i += 42
+            elif op == '7f':
+                wv = hh[i+2:i+66]
+                if wv.startswith('0'*24): emb.append(wv[24:])
+                i += 66
+            else:
+                n = int(op, 16); i += 2 + (n - 0x5f) * 2 if 0x60 <= n <= 0x7f else 2
         for x in list(dict.fromkeys(emb))[:3]:
             if int(x, 16) == 0: continue
             r = call('0x' + x, '0x5c60da1b')  # implementation()：是 Beacon 就取它的实现
