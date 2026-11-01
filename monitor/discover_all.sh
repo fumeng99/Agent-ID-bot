@@ -18,6 +18,7 @@ run tg 90 $D python3 tg/tgcall.py agentidcall dashutiaozi
 run platforms 90 $D python3 platforms/platforms.py
 run watch_sites 110 $D python3 watch_sites.py
 run fairmint 110 $D/fairmint env FM_DEADLINE=100 python3 fairmint.py --minutes 30  # 含「已部署未开铸」预警与快到门槛 20 秒重读
+run heatscan 100 $D/fairmint env FM_DEADLINE=90 python3 heatscan.py  # 2026-11-01 学  第3/5/6层：QuickNode 400 块一段扫铸造事件，Agent ID 新项目 + 付费盘并入 found.json
 run opencheck 90 $D python3 opencheck.py
 run claimscan 110 $D python3 claimscan.py 80  # 可领取奖励（只读）
 wait

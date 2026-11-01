@@ -49,6 +49,19 @@ for row in FM.get('watch_unopened', []):
     if row.get('progress_suspect') or row['open_pct'] > 100: out['skipped'].append((row['name'], a, row['open_pct'], '进度超过 100% 仍未开池，开池份数读错，不可信，不自动打满')); continue
     if row.get('open_pct_guess'): out['skipped'].append((row['name'], a, row['open_pct'], '开池份数是自动猜的总量函数，只提醒不自动打满')); continue  # 2026-11-01 风控：猜的进度不触发自动买
     if (led.get('filled') or {}).get(a): continue
+    # 2026-11-01 16:40 用户「按照你推荐来 学习优化」，学  v2.6.0/v2.5.1：
+    # ① 可升级合约（fair mint 或代币）不打满——保本/储备逻辑可被事后换掉；读失败也不打。
+    sys.path.insert(0, D); import codeutil as CU
+    from rpcpool import rpc as _rpc
+    _tok = (AOK.get(a) or {}).get('token') or v.get('token')
+    upg = [(x,) + CU.upgradeable(_rpc, x) for x in [a, _tok] if x]
+    bad = [f"{x[0][:6]}…{x[0][-4:]} {x[2] or '读取失败'}" for x in upg if x[1] is not False]
+    if bad: out['skipped'].append((row['name'], a, row['open_pct'], '可升级合约或读不到，不自动打满：' + '；'.join(bad))); continue
+    # ② 保本：合约有退款函数，或者链上实测资金真的留在开池储备（pendingBnb ≥ 已募资 75%，即国库抽成 ≤20% 加少量误差）。两者都没有不打满。
+    pb, tp = v.get('pending_bnb_bnb'), v.get('total_paid_bnb')
+    reserve_ok = bool(pb and tp and pb >= 0.75 * tp)
+    if not v.get('has_refund') and not reserve_ok:
+        out['skipped'].append((row['name'], a, row['open_pct'], f"没有退款函数，且开池储备未实测达标（pendingBnb={pb}，已募资={tp} BNB），不自动打满")); continue
     ok = AOK.get(a)
     if not (ok and ok.get('ok')): out['skipped'].append((row['name'], a, row['open_pct'], '未通过/未做 60% 审计')); continue
     vs = json.loads(subprocess.run(['python3', f'{D}/verify_source.py', a], capture_output=True, text=True, timeout=60).stdout.splitlines()[0])

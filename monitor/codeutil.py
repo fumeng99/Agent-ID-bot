@@ -109,3 +109,22 @@ def find_cap(call, a, code, sold):
     if not cand: return None, None
     cand.sort(key=lambda x: (x[1] != 10000, x[1]))
     return '0x' + cand[0][0], cand[0][1]
+
+
+UPGRADE_SELS = ('3659cfe6', '4f1ef286', '99a88ec4', '9623609d')  # upgradeTo / upgradeToAndCall / ProxyAdmin.upgrade / upgradeAndCall
+
+
+def upgradeable(rpc, a):
+    """ v2.6.0「可升级合约不打」：EIP-1967 实现/Beacon 槽非零、EIP-1167 最小代理、或合约码含升级函数 → True。
+    返回 (bool, 原因)。读失败返回 (None, 错误)。"""
+    try:
+        code = (rpc('eth_getCode', [a, 'latest']) or '0x').lower()
+        if '363d3d373d3d3d363d73' in code: return True, 'EIP-1167 最小代理'
+        for slot, nm in ((IMPL_SLOT, 'EIP-1967 实现槽'), (BEACON_SLOT, 'Beacon 槽')):
+            v = rpc('eth_getStorageAt', [a, slot, 'latest'])
+            if v and int(v, 16): return True, nm + '非零（可升级代理）'
+        hit = [s for s in UPGRADE_SELS if ('63' + s) in code]
+        if hit: return True, '合约含升级函数 ' + ','.join('0x' + h for h in hit)
+        return False, ''
+    except Exception as e:
+        return None, str(e)[:100]

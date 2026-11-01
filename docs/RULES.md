@@ -413,3 +413,14 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 来源仓库 v2.5.7（2026-11-01）：采纳——codeutil.py 按字节码逐条解析代理合约里的实现地址（旧正则会错位漏判）。已有——多节点备用。未采纳——「付手续费的免费铸造当付费、必须有保本才打」（比用户现有授权更严，建议询问用户）；回本后回落 60%、长抱 20%（卖出策略，用户未授权我们的脚本）。
 - 2026-11-01 BNDOG 根因：份数门槛 OPEN_AT=1000 早已超过，但开池实际看 pendingBnb≥OPEN_BNB(16 BNB)；募资 15.5 BNB 全不在合约（pendingBnb=0，treasury=部署者 EOA 持续转出）。现规则：份数≥100% 未开池以 BNB 储备进度为准；募资≥0.1 BNB 且 pendingBnb=0 标 reserve_missing，审计不过、autofill 跳过，汇报写明「资金没留作开池储备」。
   - 实测（eth_simulateV1 traceTransfers）：BNDOG 每笔铸造 BNB 100% 转给 treasury=部署者 EOA 0x6695…3d3a（已收约 15.6 BNB，余额仅 0.06）；健康盘（币安猫 0xad97、SAFU、币安安、BotAi）是 80% 存 WBNB 储备 + 20% 给 treasury。reserve_missing 盘一律视为「项目方能提走资金」。
+
+## 学习笔记 ·  v2.6.5（2026-11-01 16:40，用户原话「按照你推荐来 学习优化」）
+采纳：
+- 新增 fairmint/heatscan.py（discover_all 第 heatscan 步）：QuickNode 每段 400 块扫全链铸造事件（Transfer/TransferSingle from 0），30 分钟内 ≥6 个收币地址的新合约（48 小时内部署）判 Agent ID（合约码含登记合约 / 收币地址六成持 .ai）；≥12 个标 hot；像 fair mint 的或付费铸造的被调用合约自动并入 found.json。输出 new_agent（in_seen=false 的是巡逻还没处理的新项目，按免费/付费规则处理）。
+- 新增「Fair mint 快速进度」任务（每 2 分钟，fastprogress.py 只读，有 urgent 才动作），弥补 10 分钟巡逻追不上 60%→开池只要 6 分钟的热盘。
+- autofill.py 打满前新增两道闸：① 可升级合约（EIP-1967/Beacon/最小代理/含 upgradeTo）不打满，读不到也不打；② 合约有退款函数，或链上实测 pendingBnb ≥ 已募资 75%（资金真留在开池储备），二者满足其一才打满。
+- fastprogress：reserve_missing 和进度 >100% 未开池的盘不进 hot、不报跨档。
+没采纳：
+- 「必须有退款函数」作为唯一条件：Jager 模板（币安人、币安无忧、Frogs、JAGENT、币安猫等）合约里都没有退款函数，严格照搬会让 70% 打满永远不触发；改成「退款函数或实测储备」二选一，等用户决定是否要更严。
+- 80–90% 随机门槛、150–200 个 Agent ID 钱包门槛、免费只通知：与用户 60%/70% 和免费全自动规则冲突，未改。
+- 【巡逻第 2 步必做】同时读 discover_out/heatscan.json：new_agent 里 in_seen=false 的项目当作链上新候选（和 chainscan 候选一样先 verify_source.py，free=true 走免费 0 元规则，sample_value_bnb>0 走付费简报/规则 D）；added_fairmint 的合约已并入 found.json，在「▍提醒」写一行「新 fair mint（热度发现）」；errors 非空写进消息。hot=true 的项目在提醒里标「热」。

@@ -41,7 +41,7 @@ def load(p, d):
 def targets(found):
     out = []
     for a, v in found.items():
-        if v.get('opened') or v.get('is_nft'): continue
+        if v.get('opened') or v.get('is_nft') or v.get('reserve_missing'): continue  # 资金没留作开池储备的（BNDOG 类）不进高频
         oa = v.get('open_at_shares')  # 只用合约里读到的开池份数；cap_guess（猜的总量）不进高频检查
         if not oa: continue
         out.append((a, v.get('template'), oa, v.get('name') or '未命名'))
@@ -90,6 +90,7 @@ def step(found, st, aok):
             if kind not in s['alerted']:
                 s['alerted'].append(kind); out['crossings'].append(dict(row, level=kind)); out['urgent'] = True
             continue
+        if pct > 100: continue  # 份数超过开池门槛仍未开池 = 开池份数读错或资金没留作储备（BNDOG），不报跨档、不进 hot
         for lvl in LEVELS:
             if pct >= lvl and lvl not in s['alerted']:
                 s['alerted'].append(lvl); out['crossings'].append(dict(row, level=lvl, from_pct=round(prev[1] * 100 / oa, 2) if prev else None))
