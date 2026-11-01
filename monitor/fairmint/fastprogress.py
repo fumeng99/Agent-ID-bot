@@ -32,6 +32,27 @@ MIN = float(argv[argv.index('--min') + 1]) if '--min' in argv else 30.0
 LOOP = float(argv[argv.index('--loop') + 1]) if '--loop' in argv else 0
 DAEMON = '--daemon' in argv  # 常驻模式（fmkick.sh 启动）：不因 urgent 退出，事件逐条写 discover_out/fp_events.jsonl 供任务汇报
 EVERY = float(argv[argv.index('--every') + 1]) if '--every' in argv else 20
+# 2026-11-01 20:50 修偶发 40 秒超时：①单次读（discover_all）以前用阻塞锁，常驻进程一直占着锁 → 等到被外层 timeout 杀、输出空文件；
+#   ②一轮 300+ 个 eth_call 分 8 批串行、每节点 10 秒超时，慢节点时 >22 秒。现在：单次请求 4 秒超时 + 4 批并发 + 本轮 RPC 截止 RPC_BUDGET 秒，
+#   单次模式整体看门狗 FP_DEADLINE 秒（默认 32，留给外层 40 秒），超时/全失败就输出上一轮安全结果（stale:true），不再输出空文件。
+RPC_TIMEOUT = float(os.environ.get('FP_RPC_TIMEOUT', 4)); RPC_BUDGET = float(os.environ.get('FP_RPC_BUDGET', 18))
+FP_DEADLINE = float(os.environ.get('FP_DEADLINE', 32)); T0 = time.time()
+LAST = os.path.join(D, 'fastprogress_last.json'); LIVE = os.path.join(L, 'discover_out', 'fp_live.json')
+
+
+def safe_last(reason):
+    """上一轮安全结果：常驻进程心跳新鲜就用 fp_live.json，否则用 fastprogress_last.json；去掉 crossings/fastfill（已汇报过，避免重复触发）。"""
+    src, o = None, None
+    try:
+        lv = json.load(open(LIVE))
+        if time.time() - lv.get('heartbeat', 0) < 90: src, o = 'daemon_live', lv
+    except Exception: pass
+    if o is None:
+        try: src, o = 'last', json.load(open(LAST))
+        except Exception: src, o = 'none', {'checked': 0, 'hot': [], 'pre_audit': []}
+    o = dict(o); o.update({'crossings': [], 'fastfill_started': [], 'urgent': False, 'stale': src != 'daemon_live', 'source': src, 'note': reason})
+    if src == 'none': o['rpc_degraded'] = True
+    return o
 
 
 def load(p, d):
@@ -54,7 +75,7 @@ def read_once(tg):
     for a, tpl, _, _ in tg:
         m, o = CORE.get(tpl, CORE[None])
         calls += [('eth_call', [{'to': a, 'data': '0x' + CU.sel(m)}, 'latest']), ('eth_call', [{'to': a, 'data': '0x' + CU.sel(o)}, 'latest'])]
-    try: R = batch(calls, tolerant=True) if calls else []
+    try: R = batch(calls, tolerant=True, timeout=RPC_TIMEOUT, deadline=time.time() + RPC_BUDGET, parallel=4) if calls else []
     except Exception as e: return None, str(e)[:160]
     res = {}
     for j, (a, tpl, oa, nm) in enumerate(tg):
@@ -96,8 +117,12 @@ def step(found, st, aok):
             if pct >= lvl and lvl not in s['alerted']:
                 s['alerted'].append(lvl); out['crossings'].append(dict(row, level=lvl, from_pct=round(prev[1] * 100 / oa, 2) if prev else None))
                 if lvl >= 60: out['urgent'] = True
+        # 2026-11-01 20:47 用户采纳「热盘提前预警」：≥30% 且速度 ≥2%/分钟 → hot_alert（每盘只一次，记在本状态文件 alerted 里），
+        # 调用方用 `python3 fairmint/hotbrief.py <合约>` 生成完整简报，结尾等用户「确认买入」；之后跨 60%/70% 由 crossings 各报一次。
+        if pct >= 30 and (rate or 0) >= 2 and 'hot_alert' not in s['alerted']:
+            s['alerted'].append('hot_alert'); out.setdefault('hot_alert', []).append(row)
         if pct >= MIN or (row['eta_70_min'] is not None and row['eta_70_min'] <= 30):
-            if pct >= 50:  # B1 预热：提前把 Agent ID 铸造钱包数算进缓存，70% 时 autofill 不用临时扫
+            if pct >= 50 and (DAEMON or time.time() - T0 < FP_DEADLINE - 12):  # B1 预热（单次模式剩余时间不够就不扫，避免超时）：提前把 Agent ID 铸造钱包数算进缓存，70% 时 autofill 不用临时扫
                 try:
                     import minters as _MN; row['ai_minters'] = (_MN.ai_minters(a, budget=8) or {}).get('ai_minters')
                 except Exception: pass
@@ -145,7 +170,14 @@ def main():
         try: fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError: print(json.dumps({'daemon': 'already_running'})); return
         open(f'{L}/discover_out/fp_daemon.pid', 'w').write(str(os.getpid()))
-    else: fcntl.flock(lk, fcntl.LOCK_EX)
+    else:
+        import signal
+        def _wd(*_):  # 看门狗：到 FP_DEADLINE 还没跑完 → 输出上一轮安全结果，正常退出
+            print(json.dumps(dict(safe_last(f'本轮超过 {FP_DEADLINE:.0f} 秒未完成，沿用上一轮结果'), timeout=True), ensure_ascii=False, indent=1)); sys.stdout.flush(); os._exit(0)
+        signal.signal(signal.SIGALRM, _wd); signal.alarm(int(FP_DEADLINE))
+        try: fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:  # 常驻进程占着锁 = 它正在盯（事件已写 fp_events.jsonl）；直接输出它的最新读数，不再阻塞等锁
+            print(json.dumps(safe_last('常驻进程运行中，输出其最新读数'), ensure_ascii=False, indent=1)); return
     st = load(ST, {}); t_end = time.time() + LOOP; out = None
     while True:
         found = load(FOUND, {}); aok = load(AOK, {})
@@ -155,9 +187,10 @@ def main():
             out['crossings'] += o['crossings']; out['urgent'] = out['urgent'] or o['urgent']
             for k in ('time_cst', 'checked', 'read_failed', 'hot', 'pre_audit'): out[k] = o[k]
             out['fastfill_started'] = out.get('fastfill_started', []) + o.get('fastfill_started', [])
+            out['hot_alert'] = out.get('hot_alert', []) + o.get('hot_alert', [])
         json.dump(st, open(ST + '.tmp', 'w')); os.replace(ST + '.tmp', ST)
         if DAEMON:
-            ev = {k: o[k] for k in ('crossings', 'early_audit', 'fastfill_started', 'auto_audit_started', 'fastfill_err') if o.get(k)}
+            ev = {k: o[k] for k in ('crossings', 'hot_alert', 'early_audit', 'fastfill_started', 'auto_audit_started', 'fastfill_err') if o.get(k)}
             if ev:
                 ev['time_cst'] = o['time_cst']; ev['hot'] = o['hot'][:5]
                 with open(f'{L}/discover_out/fp_events.jsonl', 'a') as fe: fe.write(json.dumps(ev, ensure_ascii=False) + '\n')
@@ -172,8 +205,15 @@ def main():
         gap = 3 if (armed or rmax >= 5) else 5 if (rmax >= 2 or e <= 15 or top >= 55) else 10 if (e <= 30 or top >= 40) else (EVERY if o['hot'] else 15)
         out['interval_s'] = gap
         if DAEMON and time.time() + gap <= t_end: time.sleep(gap); continue
+        if not DAEMON and o.get('error'):  # RPC 全失败：输出上一轮安全结果而不是空列表
+            out = dict(safe_last('本轮 RPC 全部失败：' + o['error'][:100]), read_failed=o['read_failed'], rpc_degraded=True); break
         if (out['urgent'] and not armed) or not LOOP or time.time() + gap > t_end: break
         time.sleep(gap)
+    if not DAEMON:
+        signal_off = getattr(__import__('signal'), 'alarm', None); signal_off and signal_off(0)
+        if not out.get('stale') and not out.get('error'):
+            try: json.dump(out, open(LAST + '.tmp', 'w'), ensure_ascii=False); os.replace(LAST + '.tmp', LAST)
+            except Exception: pass
     print(json.dumps(out, ensure_ascii=False, indent=1))
 
 

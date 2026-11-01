@@ -456,3 +456,13 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 -  v2.7.4/2.7.6 的免费后付费当付费、保本非必需、门槛 60%：沿用既有结论（我们更严）。
 - ：同字节码 24 小时 ≥3 个即拦——Jager 模板的正常盘（币安人/币安猫等）字节码相同，照搬会误杀，不采纳（我们已有「同一部署者 24 小时 ≥3 个不同名字的盘」）；多池取价我们的 opencheck 已有；定时领取、自动止盈、分享铸造付费流程属交易功能，不采纳。
 - 仍待用户决定：fastprogress 每轮 40 秒上限偶发超时（不在自动修改范围）。
+
+## 通知分级 / 热盘预警 / 去噪（用户 2026-11-01 20:47 采纳 8 项优化；只改通知与可靠性，不放宽任何买入/卖出授权）
+- 立刻单发（当轮必发，不等整点）：自动买/卖成交（成本 U、到手 U、盈亏 U、tx/orderId，且必须核对订单 FINISHED 或 tx status=1 才写「成交」，否则写「未确认」）、卖单失败、账号掉线、USDT 不够补 BNB、approvals_watch 新增授权。
+- 热盘提前预警：fastprogress 输出 hot_alert（开池进度 ≥30% 且速度 ≥2%/分钟，每盘只一次，记在 fairmint/fastprogress_state.json 的 alerted）→ 快速进度任务当轮跑 `python3 fairmint/hotbrief.py <合约>` 发完整简报（结尾「需要买请回复：确认买入 XX 金额 + 账号」）；之后跨 60%/70% 由 crossings 各报一次。只提醒，不自动买。
+- 未验证但很热的免费盘：discover_all 的 hotfree 步（hotfree_unverified.py → discover_out/hotfree.json）：value=0、30 分钟 ≥50 个钱包、verify_source（含字节码指纹）仍未验证 → 巡逻「⚠️ 需处理」单独一段，问「要破例铸请回复：破例铸 + 项目」。每项目只提一次（hotfree_alerted.json），每轮最多 5 个，只看 90 分钟内发现的。用户回复前绝不铸。
+- 免费铸造到账：「▍交易」一行「项目｜6 号各 N 份已到账｜每号短链 tx」，不再用表格；普通跳过项只在整点那轮（分钟 <10）汇总一次。
+- 去噪：discover_out/fail_streak.json（discover_all.sh 末尾写）——某步连续 ≥3 轮失败才在消息里报（alert 列表）；「▍账户」「▍额度」先跑 `python3 notify_state.py check`，account_changed / quota_changed 为 true 才写，发出后 `python3 notify_state.py commit`。
+- discover_all.sh 不再每轮删除常驻进程文件（fp_live / possell_live / possell_daemon_out / possell_reported / autofill_fast / fail_streak / notify_last_sent），以前每轮删 possell_daemon_out.json 可能丢掉未汇报的卖出。
+- fastprogress 40 秒超时根因：①单次模式用阻塞锁，常驻进程一直占锁 → 等到被 timeout 杀、输出空文件；②300+ eth_call 8 批串行、每节点 10 秒超时（实测 22 秒）。现在：锁被占就直接输出常驻进程最新读数（source=daemon_live）；rpcpool.batch 新增 timeout/deadline/parallel，fastprogress 用 4 秒单次超时 + 4 批并发 + 18 秒截止（实测 4.8 秒）；32 秒看门狗和 RPC 全失败都输出上一轮安全结果（stale:true，crossings 清空防重复触发），不再输出空文件。
+- 手动确认买入一律用 `python3 confirmed_buy.py --to <合约> --data <calldata> [--value-bnb X | --usdt X] [--token <代币>] 账号...`：所有账号线程并发，每号仍单独 preview→干净才 execute→按 tx status=1 核对；不改金额、不加备选、不确定不重发；规则 B 未验证直接退出（用户当场破例才加 --unverified-ok "原话"）。先 `--dry` 预演。Jager/AGI 模板 fair mint 仍可用 fair_buy.py（本身已并发）。
