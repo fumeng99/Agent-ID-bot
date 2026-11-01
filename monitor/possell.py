@@ -40,7 +40,7 @@ def prices(tokens):
             t = str((p.get('baseToken') or {}).get('address', '')).lower(); liq = (p.get('liquidity') or {}).get('usd', 0) or 0
             if p.get('chainId') != 'bsc' or t not in tokens or liq < 50: continue
             if t not in out or liq > out[t]['liq']:
-                out[t] = {'px': float(p.get('priceUsd') or 0), 'liq': liq, 'url': p.get('url'), 'created': (p.get('pairCreatedAt') or 0) / 1000}
+                out[t] = {'px': float(p.get('priceUsd') or 0), 'liq': liq, 'url': p.get('url'), 'created': (p.get('pairCreatedAt') or 0) / 1000, 'pair': str(p.get('pairAddress') or '').lower()}
     miss = [t for t in tokens if t not in out]  # DexScreener 限流/没收录 → GeckoTerminal 补（流动性取 total_reserve_in_usd）
     for i in range(0, len(miss), 30):
         try: ds = get('https://api.geckoterminal.com/api/v2/networks/bsc/tokens/multi/' + ','.join(miss[i:i + 30])).get('data') or []
@@ -63,7 +63,7 @@ def prices(tokens):
                 r0, r1 = int(rv[2:66], 16), int(rv[66:130], 16)
                 rt, rw = (r0, r1) if t0[-40:].lower() == t[2:] else (r1, r0)
                 liq = 2 * rw / 1e18 * bu
-                if rt and liq >= 50: out[t] = {'px': rw / 1e18 / (rt / 10 ** dc) * bu, 'liq': liq, 'url': f'https://dexscreener.com/bsc/{pa[t]}', 'created': 0}
+                if rt and liq >= 50: out[t] = {'px': rw / 1e18 / (rt / 10 ** dc) * bu, 'liq': liq, 'url': f'https://dexscreener.com/bsc/{pa[t]}', 'created': 0, 'pair': pa[t]}
             except Exception: pass
     return out
 
@@ -93,9 +93,9 @@ def positions():
     return pos
 
 
-def sell(t, pct, labels):
+def sell(t, pct, labels, slip='8'):
     if DRY: return {l: {'dry': pct} for l in labels}
-    r = subprocess.run(['python3', f'{D}/fast_sell.py', t, str(round(pct, 2))] + labels, capture_output=True, text=True, timeout=240)
+    r = subprocess.run(['python3', f'{D}/fast_sell.py', t, str(round(pct, 2)), '--slip', slip] + labels, capture_output=True, text=True, timeout=240)
     try: return json.loads(r.stdout.splitlines()[0])['orders']
     except Exception: return {l: {'error': (r.stdout + r.stderr)[-200:]} for l in labels}
 
@@ -116,6 +116,15 @@ def step(st, out):
         P = pos[t]; q = pr[t]; px = q['px']; s = st.setdefault(t, {'name': P['name'], 'acc': {}})
         s.setdefault('first', time.time()); s['peak'] = max(s.get('peak', 0), px); s['last'] = px; s['url'] = q['url']
         opened_at = q['created'] or s['first']
+        # 学  貔貅/转账锁检查：开池后先用持币号模拟「把 1% 转进池子」（等于卖出路径），revert 就提醒且不自动卖
+        if 'hp' not in s and q.get('pair', '').startswith('0x'):
+            holder = next(((l, bal[(t, l)]) for l in P['acc'] if bal.get((t, l))), None)
+            if holder:
+                amt = int(holder[1] * 10 ** int(dec[t], 16) / 100) or 1
+                r = batch([('eth_call', [{'from': LAB[holder[0]], 'to': t, 'data': '0xa9059cbb' + q['pair'][2:].rjust(64, '0') + hex(amt)[2:].rjust(64, '0')}, 'latest'])], tolerant=True)[0]
+                s['hp'] = 'ok' if isinstance(r, str) and (r in ('0x',) or (len(r) >= 66 and int(r[:66], 16) == 1)) else 'fail'
+                if s['hp'] == 'fail': out['alerts'].append(f"{P['name']}｜模拟转入池子失败（疑似貔貅/转账锁/白名单），不自动卖，请人工确认｜{q['url']}")
+        if s.get('hp') == 'fail': continue
         acts = {}  # (kind, pct) -> [labels]
         for l, a in P['acc'].items():
             b = bal.get((t, l))
@@ -150,9 +159,9 @@ def step(st, out):
                 key = act[0]
                 if sa.get('alerted') != key: sa['alerted'] = key; out['alerts'].append(f"{P['name']}｜{l}｜触发「{key}」（价值约 {v:.2f}U）｜白天不自动卖，00:00 后仍满足会自动执行｜{q['url']}")
                 continue
-            acts.setdefault(act, []).append((l, v))
-        for (kind, pct), ls in acts.items():
-            res = sell(t, pct, [l for l, _ in ls])
+            acts.setdefault((act[0], act[1], '15' if sa.get('fail', 0) >= 2 else '8'), []).append((l, v))  # 失败 2 次后滑点 8%→15%
+        for (kind, pct, slip), ls in acts.items():
+            res = sell(t, pct, [l for l, _ in ls], slip)
             for l, v in ls:
                 r = res.get(l) or {}; sa = s['acc'][l]
                 if isinstance(r, dict) and ('orderId' in r or 'dry' in r) or r == 'no_balance':
