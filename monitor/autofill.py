@@ -45,6 +45,7 @@ for row in FM.get('watch_unopened', []):
     a = row['contract'].lower(); v = FOUND.get(a, {})
     if row['open_pct'] < 70 or v.get('opened'): continue
     if row.get('autofill_supported') is False: out['skipped'].append((row['name'], a, row['open_pct'], f"{row.get('template')} 模板，fair_buy.py 不支持，只提醒不自动打满")); continue  # 2026-11-01 审计：份数固定 10（与 100U 预算一致，原 999 可能超额）；fairmint 新识别的 JAGENT/Boss/Mao 模板不进自动买
+    if row.get('progress_suspect') or row['open_pct'] > 100: out['skipped'].append((row['name'], a, row['open_pct'], '进度超过 100% 仍未开池，开池份数读错，不可信，不自动打满')); continue
     if row.get('open_pct_guess'): out['skipped'].append((row['name'], a, row['open_pct'], '开池份数是自动猜的总量函数，只提醒不自动打满')); continue  # 2026-11-01 风控：猜的进度不触发自动买
     if (led.get('filled') or {}).get(a): continue
     ok = AOK.get(a)

@@ -407,3 +407,4 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 未采纳：①免费项目低进度降频到 10 分钟模拟一次——我们没有逐项目 2 分钟重试模拟，不适用；快到 58% 时 20 秒重试的思路我们已有 fastprogress。②“不保本不算错过”——只是对方日志口径，我们不依赖。
 
 - 规则 B 硬闸（2026-11-01）：币安狗狗 BNDOG（0xefce…737d）claimFree 源码未验证仍被六号领取（免费、无授权，用户选择验证后再碰）。mint_many.py 现会先跑 verify_source.py，目标合约未验证或查询失败即整批不发（exit 3, source_unverified）；巡逻不得用手动 baw execute 绕过。
+- 进度 >100% 仍未开池（2026-11-01 币安狗狗 BNDOG 0xefce…737d 读到 OPEN_AT=1000 但已铸 5800+、无池子、合约不留 BNB）：标 progress_suspect + 猜测值，汇报写「进度异常（开池份数读错）」，不当成 ≥70%，autofill 一律跳过。

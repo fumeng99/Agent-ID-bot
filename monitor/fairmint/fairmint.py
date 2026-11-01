@@ -509,6 +509,8 @@ def main():
             if v.get('deadline_ts'): row['deadline_cst'] = time.strftime('%m-%d %H:%M', time.gmtime(v['deadline_ts'] + 8 * 3600))
             if a in stale_set: row['stale'] = True  # 本轮读数失败，显示的是上一轮的数
             if v.get('open_at_src'): row['open_at_src'] = v['open_at_src']
+            if op > 100 and not v.get('opened'):  # 2026-11-01 币安狗狗 582% 仍未开池：开池份数读错（模板不同/免费份也计数），进度不可信
+                row['progress_suspect'] = True; row['open_pct_guess'] = True; guessed = True
             if guessed: row['open_pct_guess'] = True  # 总量是猜的：只提醒，autofill 不自动买
             if v.get('premint'): row['premint'] = True
             if v.get('deployer'): row['dev_contracts'] = sum(1 for x in found.values() if x.get('deployer') == v['deployer'])  # 同一部署者的 fair mint 数（≥3 = 重复 DEV）
