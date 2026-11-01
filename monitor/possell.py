@@ -5,7 +5,10 @@
   回本后：10 倍 → 卖剩余 30%；20 倍 → 再卖剩余 50%；从最高价回落 60% → 卖到只剩原始数量 20%（长抱，不自动卖）；50/100 倍只通知
 免费铸造所得（seen.json 免费类且有 token）：开池 3 分钟后，从最高价回落 50% → 全卖。
 通用：每号价值 <0.3U 不卖；卖失败按 1/2/4/8… 分钟退避重试，价值 <3U 的失败 6 次放弃；各号并行（fast_sell.py）。
-自动卖只在 00:00–09:00 CST；其他时间触发只出提醒（alerts），不卖。价格取 DexScreener BSC 流动性最大的池子，连续 2 次低于门槛才算。
+2026-11-01 18:45 用户「按照你推荐来」（A–D）：A 自动买入（auto_buy 非 manual）和免费所得全天自动卖；手动确认买入的仍只在 00:00–09:00 自动卖、白天提醒。
+B 常驻：--daemon 写 possell_live.json 心跳，持仓盘开池 15 分钟内 3 秒一轮，否则 20 秒（fmkick.sh 拉起）。
+C 开池 10 分钟内曾到 1.5 倍、又跌回成本 → 卖 50% 保本（一次，算作回本）。
+D 预估冲击 >15%（卖出额 > 池子单边 15%）就分两笔、间隔 15 秒；滑点上限 15%；fast_sell 每号先 quote 预演，预演失败不下单。价格取 DexScreener BSC 流动性最大的池子，连续 2 次低于门槛才算。
 用法：python3 possell.py [--dry] [--loop 秒 --every 秒]
 输出 JSON：sold / alerts / notify / errors
 """
@@ -19,7 +22,7 @@ args = sys.argv[1:]; DRY = '--dry' in args
 def opt(k, d): return float(args[args.index(k) + 1]) if k in args else d
 LOOP, EVERY = opt('--loop', 0), opt('--every', 20)
 R = dict(backX=2, steps=[(10, 30), (20, 50)], crash=0.40, crashAfterBack=0.60, moonPct=20, moonNotify=[50, 100], notifyX=[5, 10, 20],
-         freeDrop=0.50, freeWaitSec=180, minU=0.3, smallU=3, smallMaxFail=6)
+         freeDrop=0.50, freeWaitSec=180, minU=0.3, smallU=3, smallMaxFail=6, earlyX=1.5, earlyWin=600, impact=0.15, fastWin=900)
 
 
 def cst_hour(): return time.gmtime(time.time() + 8 * 3600).tm_hour
@@ -80,7 +83,7 @@ def positions():
     for p in json.load(open(f'{D}/auto_buy.json')).get('positions', []):
         t = str(p.get('token') or '').lower()
         if not t.startswith('0x'): continue
-        e = pos.setdefault(t, {'name': p.get('project'), 'paid': True, 'acc': {}})
+        e = pos.setdefault(t, {'name': p.get('project'), 'paid': True, 'manual': bool(p.get('manual')), 'acc': {}})
         for a in p.get('accounts', []):
             e['acc'][a] = {'qty0': float(p.get('qty_each') or 0), 'cost_bnb': float(p.get('cost_bnb_each') or 0), 'cost_u': p.get('cost_u_each')}
     try: seen = json.load(open(f'{D}/seen.json'))
@@ -140,8 +143,10 @@ def step(st, out):
                 for n in R['notifyX'] + R['moonNotify']:
                     if x >= n and n not in sa.setdefault('nx', []): sa['nx'].append(n); out['notify'].append(f"{P['name']}｜{l}｜到 {n} 倍（现价 {px:.3g}U）｜{q['url']}")
                 dd = 1 - px / s['peak'] if s['peak'] else 0
+                sa['xmax'] = max(sa.get('xmax', 0), round(x, 3))
                 if sa['stage'] == 0:
                     if x >= R['backX']: act = ('回本卖一半', 50)
+                    elif sa['xmax'] >= R['earlyX'] and x <= 1.0 and time.time() - opened_at <= R['earlyWin']: act = ('回本卖一半（开池初期冲高 1.5 倍后跌回成本）', 50)
                     elif dd >= R['crash']: act = ('回本前从高点回落 40% 全卖', 100)
                 else:
                     if x >= 20 and not sa.get('s20') and sa.get('s10'): act = ('20 倍卖剩余 50%', 50)
@@ -155,18 +160,28 @@ def step(st, out):
             if not act: sa.pop('hit', None); continue
             sa['hit'] = sa.get('hit', 0) + 1
             if sa['hit'] < 2: continue  # 连续两次才算，防价格源跳动
-            if not night():
+            if P.get('manual') and not night():  # A：只有手动确认买入的仓位白天只提醒
                 key = act[0]
-                if sa.get('alerted') != key: sa['alerted'] = key; out['alerts'].append(f"{P['name']}｜{l}｜触发「{key}」（价值约 {v:.2f}U）｜白天不自动卖，00:00 后仍满足会自动执行｜{q['url']}")
+                if sa.get('alerted') != key: sa['alerted'] = key; out['alerts'].append(f"{P['name']}｜{l}｜触发「{key}」（价值约 {v:.2f}U）｜手动仓位白天不自动卖，00:00 后仍满足会自动执行｜{q['url']}")
                 continue
-            acts.setdefault((act[0], act[1], '15' if sa.get('fail', 0) >= 2 else '8'), []).append((l, v))  # 失败 2 次后滑点 8%→15%
+            acts.setdefault((act[0], act[1], '15' if sa.get('fail', 0) >= 2 else '8'), []).append((l, v))
+        s['liq'] = q.get('liq') or 0  # 失败 2 次后滑点 8%→15%
         for (kind, pct, slip), ls in acts.items():
-            res = sell(t, pct, [l for l, _ in ls], slip)
+            sell_u = sum(v for _, v in ls) * pct / 100; side = (q.get('liq') or 0) / 2
+            if side and sell_u > side * R['impact']:  # D：一次卖冲击太大 → 分两笔
+                p1 = pct / 2; res = sell(t, p1, [l for l, _ in ls], slip); time.sleep(15)
+                ok = [l for l, _ in ls if isinstance(res.get(l), dict) and 'orderId' in res[l]]
+                if ok:
+                    r2 = sell(t, round((pct - p1) / (100 - p1) * 100, 2) if p1 < 100 else 100, ok, slip)
+                    for l in ok:
+                        if not (isinstance(r2.get(l), dict) and 'orderId' in r2[l]): out['errors'].append(f"{P['name']}｜{l}｜{kind} 第二笔失败（第一笔已成交 {res[l].get('orderId')}），不重发，下轮按价格重判：{str(r2.get(l))[:100]}")
+            else:
+                res = sell(t, pct, [l for l, _ in ls], slip)
             for l, v in ls:
                 r = res.get(l) or {}; sa = s['acc'][l]
                 if isinstance(r, dict) and ('orderId' in r or 'dry' in r) or r == 'no_balance':
                     sa['fail'] = 0; sa.pop('hit', None)
-                    if kind.startswith('回本卖'): sa['stage'] = 1
+                    if kind.startswith('回本卖'): sa['stage'] = 1  # 含 C 的早期保本
                     elif kind.startswith('10 倍'): sa['s10'] = True
                     elif kind.startswith('20 倍'): sa['s20'] = True
                     elif '长抱' in kind: sa['moon'] = True
@@ -190,8 +205,14 @@ def main():
         try: step(st, out)
         except Exception as e: out['errors'].append(f'step: {str(e)[:160]}')
         if not DRY: json.dump(st, open(ST + '.tmp', 'w'), ensure_ascii=False); os.replace(ST + '.tmp', ST)
-        if not LOOP or time.time() + EVERY > end: break
-        time.sleep(EVERY)
+        gap = EVERY
+        if '--daemon' in args:
+            json.dump({'heartbeat': int(time.time()), 'time_cst': now(), 'pid': os.getpid()}, open(f'{D}/discover_out/possell_live.json', 'w'))
+            fresh = any(v.get('first') and time.time() - v['first'] <= R['fastWin'] for v in st.values() if isinstance(v, dict))
+            gap = 3 if fresh else EVERY
+            json.dump(out, open(f'{D}/discover_out/possell_daemon_out.json', 'w'), ensure_ascii=False, indent=1)
+        if not LOOP or time.time() + gap > end: break
+        time.sleep(gap)
     print(json.dumps(out, ensure_ascii=False, indent=1))
 
 

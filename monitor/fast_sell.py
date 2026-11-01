@@ -9,7 +9,7 @@ A = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
 args = sys.argv[1:]; DRY = '--dry' in args
 def opt(k, d):
     return args[args.index(k) + 1] if k in args else d
-SLIP = opt('--slip', '8'); GAS = opt('--gas', 'HIGH')
+SLIP = str(min(float(opt('--slip', '8')), 15))  # D：滑点上限 15%; GAS = opt('--gas', 'HIGH')
 pos = [x for i, x in enumerate(args) if not x.startswith('--') and (i == 0 or args[i-1] not in ('--slip', '--gas'))]
 T = pos[0]; PCT = float(pos[1]) if len(pos) > 1 and pos[1].replace('.', '').isdigit() else 100.0
 only = [x for x in pos[1:] if not x.replace('.', '').isdigit()]
@@ -23,6 +23,10 @@ def one(a, b):
     qty = ('%.6f' % q).rstrip('0').rstrip('.') if PCT < 100 else str(int(b, 16) / 10**dec)
     if PCT >= 100: qty = '%.6f' % (int(b, 16) // 10**(dec-6) / 1e6) if dec >= 6 else str(int(b, 16) / 10**dec)
     env = dict(os.environ, HOME=a['home'], npm_config_cache='/tmp/npmcache')
+    if not DRY:  # 2026-11-01 D：每号先 quote 预演，失败不下单
+        qr = subprocess.run([B, 'market-order', 'quote', '--binanceChainId', '56', '--fromTokenQty', qty, '--fromToken', T, '--toToken', U, '--slippage', SLIP, '--json'], env=env, capture_output=True, text=True, timeout=60)
+        try: assert json.loads(qr.stdout).get('data')
+        except Exception: return a['label'], {'qty': qty, 'error': 'quote 预演失败，未下单：' + (qr.stdout + qr.stderr)[:160]}
     cmd = [B, 'market-order', 'quote' if DRY else 'swap', '--binanceChainId', '56', '--fromTokenQty', qty, '--fromToken', T, '--toToken', U, '--slippage', SLIP, '--json']
     if not DRY: cmd[-1:-1] = ['--gasLevel', GAS]
     r = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=150)
