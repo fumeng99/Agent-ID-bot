@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+bash $AIDBOT_DATA/fmkick.sh > $AIDBOT_DATA/discover_out/fmkick.json 2>&1  # 2026-11-01 常驻快速进度看门狗（巡逻每轮也拉起一次，与快速进度任务错开 → 持续无空档）
 # 并行跑所有发现类脚本（只读，不签名不交易），避免串行超时导致 TG/内盘/官网监控整轮没跑。
 # 输出：$AIDBOT_DATA/discover_out/<步骤>.json(.err)，以及 summary.txt（每步 exit code 和耗时）。
 # 用法：bash discover_all.sh   （总用时约等于最慢一步，≤200 秒）
