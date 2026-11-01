@@ -35,7 +35,11 @@ def one(a,cache):
        'sourcify_url':f'https://repo.sourcify.dev/56/{a}','bscscan_url':f'https://bscscan.com/address/{a}#code'}
     cache[a]=r; return r
 if __name__=='__main__':
-    cache=json.load(open(CF)) if os.path.exists(CF) else {}
+    try: cache=json.load(open(CF)) if os.path.exists(CF) else {}
+    except Exception:
+        # 并发写坏时取第一个完整 JSON 对象，读不了就当空缓存（2026-11-01 多进程共用 .tmp 导致缓存损坏）
+        try: cache=json.JSONDecoder().raw_decode(open(CF).read())[0]
+        except Exception: cache={}
     addrs=[x.lower() for x in sys.argv[1:]]
     try: slots=batch([('eth_getStorageAt',[a,IMPL,'latest']) for a in addrs],tolerant=True)
     except Exception: slots=[None]*len(addrs)
@@ -46,4 +50,4 @@ if __name__=='__main__':
             ri=one(impl,cache); r['proxy_impl']=impl; r['impl_verified']=ri['verified']
             r['verified']=bool(r['verified'] and ri['verified'])
         r.pop('t',None); print(json.dumps(r,ensure_ascii=False))
-    tmp=CF+'.tmp'; json.dump(cache,open(tmp,'w')); os.replace(tmp,CF)
+    tmp=CF+'.%d.tmp'%os.getpid(); json.dump(cache,open(tmp,'w')); os.replace(tmp,CF)
