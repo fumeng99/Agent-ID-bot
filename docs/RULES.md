@@ -466,3 +466,6 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - discover_all.sh 不再每轮删除常驻进程文件（fp_live / possell_live / possell_daemon_out / possell_reported / autofill_fast / fail_streak / notify_last_sent），以前每轮删 possell_daemon_out.json 可能丢掉未汇报的卖出。
 - fastprogress 40 秒超时根因：①单次模式用阻塞锁，常驻进程一直占锁 → 等到被 timeout 杀、输出空文件；②300+ eth_call 8 批串行、每节点 10 秒超时（实测 22 秒）。现在：锁被占就直接输出常驻进程最新读数（source=daemon_live）；rpcpool.batch 新增 timeout/deadline/parallel，fastprogress 用 4 秒单次超时 + 4 批并发 + 18 秒截止（实测 4.8 秒）；32 秒看门狗和 RPC 全失败都输出上一轮安全结果（stale:true，crossings 清空防重复触发），不再输出空文件。
 - 手动确认买入一律用 `python3 confirmed_buy.py --to <合约> --data <calldata> [--value-bnb X | --usdt X] [--token <代币>] 账号...`：所有账号线程并发，每号仍单独 preview→干净才 execute→按 tx status=1 核对；不改金额、不加备选、不确定不重发；规则 B 未验证直接退出（用户当场破例才加 --unverified-ok "原话"）。先 `--dry` 预演。Jager/AGI 模板 fair mint 仍可用 fair_buy.py（本身已并发）。
+
+## 学习笔记（2026-11-01 23:xx）
+- 学习源 v2.7.7→v2.8.3 已读代码 diff。未移植进我们脚本（自动买入逻辑改动风险高，留待用户确认）：①防定点钓鱼：总盘≥10 BNB、已售≥500 份或已募≥5 BNB、两钱包合计≤总盘2%才买；②防小号凑数：参与钱包需注册>24h 且 nonce≥8；③合约地址须 eth_getCode 有代码并排除 Multicall/0xeeee 等通用地址（我们 sitescan 已有 INFRA 过滤）；④刚开盘代币每15秒查价；⑤同币加仓成本累加；⑥「AI 热门代币」20分钟100个 Agent ID 钱包自动买（新增自动买入类型，需用户授权，未采纳）。
