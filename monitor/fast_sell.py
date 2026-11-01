@@ -9,7 +9,8 @@ A = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
 args = sys.argv[1:]; DRY = '--dry' in args
 def opt(k, d):
     return args[args.index(k) + 1] if k in args else d
-SLIP = str(min(float(opt('--slip', '8')), 15))  # D：滑点上限 15%; GAS = opt('--gas', 'HIGH')
+SLIP = str(min(float(opt('--slip', '8')), 15))  # D：滑点上限 15%
+GAS = opt('--gas', 'HIGH')
 pos = [x for i, x in enumerate(args) if not x.startswith('--') and (i == 0 or args[i-1] not in ('--slip', '--gas'))]
 T = pos[0]; PCT = float(pos[1]) if len(pos) > 1 and pos[1].replace('.', '').isdigit() else 100.0
 only = [x for x in pos[1:] if not x.replace('.', '').isdigit()]
@@ -32,7 +33,19 @@ def one(a, b):
     r = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=150)
     try:
         d = json.loads(r.stdout)['data']
-        return a['label'], {'qty': qty, **({'orderId': d['orderId']} if not DRY else {'quote': str(d)[:160]})}
+        if DRY: return a['label'], {'qty': qty, 'quote': str(d)[:160]}
+        # 2026-11-01 19:50 修：拿到 orderId 不等于成交（BNBHolder 卖一半那笔实际 FAILED 却被记成已卖）。轮询订单状态，FINISHED 才算卖出
+        oid = d['orderId']
+        for _ in range(15):
+            time.sleep(4)
+            try:
+                L = json.loads(subprocess.run([B, 'market-order', 'list', '--json'], env=env, capture_output=True, text=True, timeout=60).stdout)['data']
+                L = L.get('list', L) if isinstance(L, dict) else L
+                o = next((x for x in L if x.get('orderId') == oid), None)
+            except Exception: o = None
+            if o and o.get('status') == 'FINISHED': return a['label'], {'qty': qty, 'orderId': oid, 'got_u': o.get('toTokenActualQty'), 'tx': o.get('txHash')}
+            if o and o.get('status') in ('FAILED', 'CANCELLED', 'EXPIRED'): return a['label'], {'qty': qty, 'error': f'订单 {oid} {o["status"]}，未成交'}
+        return a['label'], {'qty': qty, 'error': f'订单 {oid} 60 秒未确认成交，不重发，下轮按余额重判'}
     except Exception:
         return a['label'], {'qty': qty, 'error': (r.stdout + r.stderr)[:200]}
 with ThreadPoolExecutor(len(acc)) as ex:

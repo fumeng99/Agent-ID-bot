@@ -4,6 +4,7 @@
   回本前：涨到成本 2 倍 → 卖 50%（回本，一次）；从开池后最高价回落 40% → 全卖（移动止损，取代原「跌到买入价 -40%」）
   回本后：10 倍 → 卖剩余 30%；20 倍 → 再卖剩余 50%；从最高价回落 60% → 卖到只剩原始数量 20%（长抱，不自动卖）；50/100 倍只通知
 免费铸造所得（seen.json 免费类且有 token）：开池 3 分钟后，从最高价回落 50% → 全卖。
+2026-11-01 19:54 用户「按照你推荐来」：回撤门槛改为 回本前 35% 全卖、回本后 50% 卖到留 20%、免费所得 40% 全卖（替代 40/60/50）。
 通用：每号价值 <0.3U 不卖；卖失败按 1/2/4/8… 分钟退避重试，价值 <3U 的失败 6 次放弃；各号并行（fast_sell.py）。
 2026-11-01 18:45 用户「按照你推荐来」（A–D）：A 自动买入（auto_buy 非 manual）和免费所得全天自动卖；手动确认买入的仍只在 00:00–09:00 自动卖、白天提醒。
 B 常驻：--daemon 写 possell_live.json 心跳，持仓盘开池 15 分钟内 3 秒一轮，否则 20 秒（fmkick.sh 拉起）。
@@ -21,8 +22,8 @@ LAB = {a['label']: a['bsc'].lower() for a in ACC}
 args = sys.argv[1:]; DRY = '--dry' in args
 def opt(k, d): return float(args[args.index(k) + 1]) if k in args else d
 LOOP, EVERY = opt('--loop', 0), opt('--every', 20)
-R = dict(backX=2, steps=[(10, 30), (20, 50)], crash=0.40, crashAfterBack=0.60, moonPct=20, moonNotify=[50, 100], notifyX=[5, 10, 20],
-         freeDrop=0.50, freeWaitSec=180, minU=0.3, smallU=3, smallMaxFail=6, earlyX=1.5, earlyWin=600, impact=0.15, fastWin=900)
+R = dict(backX=2, steps=[(10, 30), (20, 50)], crash=0.35, crashAfterBack=0.50, moonPct=20, moonNotify=[50, 100], notifyX=[5, 10, 20],
+         freeDrop=0.40, freeWaitSec=180, minU=0.3, smallU=3, smallMaxFail=6, earlyX=1.5, earlyWin=600, impact=0.15, fastWin=900)
 
 
 def cst_hour(): return time.gmtime(time.time() + 8 * 3600).tm_hour
@@ -147,24 +148,25 @@ def step(st, out):
                 if sa['stage'] == 0:
                     if x >= R['backX']: act = ('回本卖一半', 50)
                     elif sa['xmax'] >= R['earlyX'] and x <= 1.0 and time.time() - opened_at <= R['earlyWin']: act = ('回本卖一半（开池初期冲高 1.5 倍后跌回成本）', 50)
-                    elif dd >= R['crash']: act = ('回本前从高点回落 40% 全卖', 100)
+                    elif dd >= R['crash']: act = ('回本前从高点回落 35% 全卖', 100)
                 else:
                     if x >= 20 and not sa.get('s20') and sa.get('s10'): act = ('20 倍卖剩余 50%', 50)
                     elif x >= 10 and not sa.get('s10'): act = ('10 倍卖剩余 30%', 30)
                     elif dd >= R['crashAfterBack'] and not sa.get('moon'):
                         keep = a['qty0'] * R['moonPct'] / 100
-                        if b > keep * 1.02: act = ('回本后从高点回落 60%，卖到只留 20% 长抱', round(100 * (1 - keep / b), 2))
+                        if b > keep * 1.02: act = ('回本后从高点回落 50%，卖到只留 20% 长抱', round(100 * (1 - keep / b), 2))
             else:
                 if time.time() - opened_at < R['freeWaitSec']: continue
-                if s['peak'] and px <= s['peak'] * (1 - R['freeDrop']): act = ('免费币从高点回落 50% 全卖', 100)
+                if s['peak'] and px <= s['peak'] * (1 - R['freeDrop']): act = ('免费币从高点回落 40% 全卖', 100)
             if not act: sa.pop('hit', None); continue
             sa['hit'] = sa.get('hit', 0) + 1
             if sa['hit'] < 2: continue  # 连续两次才算，防价格源跳动
-            if P.get('manual') and not night():  # A：只有手动确认买入的仓位白天只提醒
+            if False:  # 2026-11-01 19:46 用户原话「改」：手动确认买入的仓位也全天自动卖（原 A 规则手动仓白天只提醒）
                 key = act[0]
                 if sa.get('alerted') != key: sa['alerted'] = key; out['alerts'].append(f"{P['name']}｜{l}｜触发「{key}」（价值约 {v:.2f}U）｜手动仓位白天不自动卖，00:00 后仍满足会自动执行｜{q['url']}")
                 continue
-            acts.setdefault((act[0], act[1], '15' if sa.get('fail', 0) >= 2 else '8'), []).append((l, v))
+            # 2026-11-01 19:56：8% 滑点在开池急跌时卖单回滚（BNBHolder），改首笔 12%、失败一次就 15%（上限 15%）
+            acts.setdefault((act[0], act[1], '15' if sa.get('fail', 0) >= 1 else '12'), []).append((l, v))
         s['liq'] = q.get('liq') or 0  # 失败 2 次后滑点 8%→15%
         for (kind, pct, slip), ls in acts.items():
             sell_u = sum(v for _, v in ls) * pct / 100; side = (q.get('liq') or 0) / 2

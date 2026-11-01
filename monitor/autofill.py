@@ -74,6 +74,9 @@ for row in FM.get('watch_unopened', []):
     except Exception as ex: mr = None
     if not mr or mr['ai_minters'] < 100:
         out['skipped'].append((row['name'], a, row['open_pct'], f"Agent ID 铸造钱包不足 100（{'读不到' if not mr else str(mr['ai_minters']) + ' 个，共 ' + str(mr['minters']) + ' 个地址'}），疑似自灌进度，不自动打满")); continue
+    # ④b 学 -tools v0.4.1 devcheck：单个地址铸了 >30% 的事件 = 项目方自己刷进度的诱饵盘，不打满（只会更严；事件数 <20 时不判）
+    if mr.get('top_share') and mr.get('mint_events', 0) >= 20 and mr['top_share'] > 0.3 and mr['minters'] >= 2:
+        out['skipped'].append((row['name'], a, row['open_pct'], f"单个地址 {mr['top_minter'][:6]}…{mr['top_minter'][-4:]} 占了 {mr['top_share']*100:.0f}% 的铸造事件，疑似自灌进度，不自动打满")); continue
     # ② 保本：合约有退款函数，或者链上实测资金真的留在开池储备（pendingBnb ≥ 已募资 75%，即国库抽成 ≤20% 加少量误差）。两者都没有不打满。
     pb, tp = v.get('pending_bnb_bnb'), v.get('total_paid_bnb')
     reserve_ok = bool(pb and tp and pb >= 0.75 * tp)

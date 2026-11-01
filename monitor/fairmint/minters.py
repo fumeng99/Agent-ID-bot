@@ -15,6 +15,7 @@ def ai_minters(c, deploy_block=None, budget=40):
     c = c.lower(); F.DEADLINE = max(getattr(F, 'DEADLINE', 0), time.time() + budget + 10)
     cache = json.load(open(CACHE)) if os.path.exists(CACHE) else {}
     e = cache.get(c) or {'m': [], 'to': (deploy_block or 0) - 1, 'ai': {}}
+    if 'cnt' not in e: e['cnt'] = {}; e['to'] = (deploy_block or 0) - 1 if deploy_block else -1; e['m'] = []  # 2026-11-01 学  v0.4.1：要算单一地址占比，旧缓存没有逐地址计数 → 从部署块重扫一次
     m = set(e['m']); head = int(F.rpc('eth_blockNumber', []), 16); t0 = time.time()
     if e['to'] < 0:
         _f = (json.load(open(os.path.join(D, 'found.json'))).get(c) or {})
@@ -28,7 +29,8 @@ def ai_minters(c, deploy_block=None, budget=40):
         d = F._post(F.QN, {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getLogs', 'params': [{'address': c, 'topics': [F.TOPICS], 'fromBlock': hex(f), 'toBlock': hex(t)}]}, 30)
         if 'result' not in d: return None
         for l in d['result']:
-            if len(l['topics']) > 1: m.add('0x' + l['topics'][1][-40:])
+            if len(l['topics']) > 1:
+                a_ = '0x' + l['topics'][1][-40:]; m.add(a_); e['cnt'][a_] = e['cnt'].get(a_, 0) + 1
         e['to'] = t; f = t + 1
     # 抽样查 .ai 身份（查过的缓存）
     todo = [x for x in random.sample(sorted(m), min(24, len(m))) if x not in e['ai']]
@@ -40,7 +42,8 @@ def ai_minters(c, deploy_block=None, budget=40):
     e['m'] = sorted(m); cache[c] = e; json.dump(cache, open(CACHE, 'w'))
     if len(smp) < min(10, len(m)): return None
     ratio = sum(smp) / len(smp) if smp else 0
-    return {'minters': len(m), 'ai_ratio': round(ratio, 2), 'ai_minters': int(len(m) * ratio)}
+    tot = sum(e['cnt'].values()); top = max(e['cnt'].items(), key=lambda kv: kv[1]) if e['cnt'] else (None, 0)
+    return {'minters': len(m), 'ai_ratio': round(ratio, 2), 'ai_minters': int(len(m) * ratio), 'mint_events': tot, 'top_minter': top[0], 'top_share': round(top[1] / tot, 3) if tot else None}
 
 
 if __name__ == '__main__':

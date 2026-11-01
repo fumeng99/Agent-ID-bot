@@ -1,7 +1,11 @@
 # 更新日志
 
 ## 2026-11-01
+### 新增
+- approvals_watch.py：授权巡检（只读 baw approvals list，新增授权只提醒不撤销），接入 discover_all
+- minters.py/autofill.py：单个地址铸造占比 >30% 视为自灌进度，不自动打满
 ### 修复
+- fairmint.py：安静盘不重复读（刷新数大幅减少）；超时看门狗输出安全的 timeout JSON，避免外层 timeout 杀掉后输出为空
 - codeutil.py：代理合约实现地址按字节码逐条解析（旧正则会错位漏判）
 
 

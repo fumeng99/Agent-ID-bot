@@ -4,7 +4,7 @@
 import sys,os,json,time,urllib.request
 sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 from rpcpool import batch
-D=os.path.dirname(os.path.abspath(__file__)); CF=os.path.join(D,'verify_cache.json')
+D=os.path.dirname(os.path.abspath(__file__)); CF=os.path.join(D,'verify_cache.json'); FP=os.path.join(D,'verified_fp.json')
 UA={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'}
 IMPL='0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
 def get(u,t=15):
@@ -31,6 +31,22 @@ def one(a,cache):
         o=oklink(a)
         if o is True: src='bscscan/oklink'
         elif o=='ERR' and s=='ERR': return {'addr':a,'verified':None,'source':'查询失败','t':time.time()}
+    if not src:
+        # 2026-11-01 20:36 用户同意：未验证但字节码指纹（去元数据、PUSH20/32 立即数清零）与某个已验证合约完全一致 → 视为同一份已验证源码
+        try:
+            from codefp import fps
+            fp=fps([a]).get(a); ref=json.load(open(FP)) if os.path.exists(FP) else {}
+            hit=[x for x,f in ref.items() if fp and f==fp and x!=a]
+            if hit: src='bytecode-match:'+hit[0]
+        except Exception: pass
+    elif not src.startswith('bytecode-match'):
+        try:
+            from codefp import fps
+            fp=fps([a]).get(a)
+            if fp:
+                ref=json.load(open(FP)) if os.path.exists(FP) else {}; ref[a]=fp
+                t=FP+'.%d.tmp'%os.getpid(); json.dump(ref,open(t,'w')); os.replace(t,FP)
+        except Exception: pass
     r={'addr':a,'verified':bool(src),'source':src or '未验证','t':time.time(),
        'sourcify_url':f'https://repo.sourcify.dev/56/{a}','bscscan_url':f'https://bscscan.com/address/{a}#code'}
     cache[a]=r; return r

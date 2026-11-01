@@ -43,8 +43,11 @@ case "$cmd" in
   HOME=$h timeout 100 "$BAW" auth verify --qrCodeId "$q" --json 2>&1 | tail -c 600; echo
   echo "status: $(status "$acc")"
   HOME=$h timeout 40 "$BAW" wallet agent-id --json 2>&1 | tr -d '\n ' | head -c 300; echo
-  [ "$(status "$acc")" = CONNECTED ] && { cp -p "$h/.baw/session.json" "$h/.baw/session.json.good"; rm -f "$LM/so_$acc.json"; } ;;
+  [ "$(status "$acc")" = CONNECTED ] && { cp -p "$h/.baw/session.json" "$h/.baw/session.json.good"; rm -f "$LM/so_$acc.json"; }
+  # 登录后按钱包地址核对实际是哪个号（扫错号会自动对调目录，并报出来）
+  timeout 110 python3 "$BASE/whoami.py" ;;
+ whoami) timeout 110 python3 "$BASE/whoami.py" ;;
  backup)
-  for a in main acc001 acc002 acc003 acc004; do [ "$(status $a)" = CONNECTED ] && cp -p "$(home $a)/.baw/session.json" "$(home $a)/.baw/session.json.good" && echo "$a backed up"; done ;;
+  for a in main acc001 acc002 acc003 acc004 acc005; do [ "$(status $a)" = CONNECTED ] && cp -p "$(home $a)/.baw/session.json" "$(home $a)/.baw/session.json.good" && echo "$a backed up"; done ;;
  *) echo "usage: $0 check|signin|verify <acc> | backup"; exit 2 ;;
 esac

@@ -391,7 +391,23 @@ def backfill_deployers(found, head, budget=3):
             pass
 
 
+def _watchdog():
+    """2026-11-01 20:3x：巡逻记录里 fairmint 常被外层 timeout 110 秒杀掉、stdout 为空（autofill 读空文件崩溃）。
+    到 DEADLINE+5 秒还没跑完，就输出一份「超时」JSON（各列表为空、rpc_degraded=true，不会触发任何买入）再退出；
+    found.json/state.json 都是原子写，中途退出不会写坏，下轮从 st['last'] 断点续扫。"""
+    import threading
+    def fire():
+        msg = json.dumps({'error': 'fairmint watchdog: 超过时限，本轮未完成（沿用上轮 found.json）', 'timeout': True, 'rpc_degraded': True,
+                          'elapsed_s': round(time.time() - T0, 1), 'new': [], 'premint_new': [], 'mint_started': [], 'agentid_deployed': [],
+                          'premint_watch': [], 'watch_unopened': [], 'near_open': [], 'near_open_guess': [], 'just_opened': [], 'active': {}}, ensure_ascii=False)
+        try: os.write(1, (msg + '\n').encode())
+        finally: os._exit(4)
+    t = threading.Timer(max(1.0, DEADLINE + 5 - time.time()), fire); t.daemon = True; t.start()
+    return t
+
+
 def main():
+    _wd = _watchdog()
     mins = 30; hours = 0
     if '--minutes' in sys.argv: mins = int(sys.argv[sys.argv.index('--minutes') + 1])
     if '--hours' in sys.argv: hours = float(sys.argv[sys.argv.index('--hours') + 1])
@@ -450,7 +466,14 @@ def main():
     unopened = [a for a, v in found.items() if not v.get('opened') and not v.get('is_nft') and a not in seen_now
                 and (v.get('premint') or fresh(v) or (v.get('last_open_pct') or 0) >= 30)]
     new = []
-    targets = list(seen_now) + unopened
+    # 2026-11-01 20:3x 优化（巡逻记录里 fairmint 一半的轮次超时 exit 124：刷新 200 多个合约要 70+ 秒，并行时超过 110 秒）：
+    # 本轮没有任何 Minted/开池事件、已识别模板、码里有 Minted 事件、进度 <5%、且 20 分钟内刚读过的「安静盘」不重复读——
+    # 它一旦有人铸造或开池就会出现在事件里（seen_now）被完整刷新，所以不会漏；这些盘仍留在 watch 列表里（沿用上次读数）。
+    def quiet(a, v):
+        return (a not in seen_now and v.get('_has_minted_evt') and v.get('template') in TPL and (v.get('last_open_pct') or 0) < 5
+                and not v.get('opened') and now - v.get('_refr_at', 0) < 1200 and v.get('total_minted') is not None)
+    skipped_quiet = {a for a in unopened if quiet(a, found[a])}
+    targets = list(seen_now) + [a for a in unopened if a not in skipped_quiet]
     code_cache = {}
     infos = info_many(targets, prev=found, code_cache=code_cache)
     for a in targets:
@@ -465,6 +488,8 @@ def main():
                     if k2 not in i: found[a].pop(k2, None)
             found[a].update({k: v for k, v in i.items() if v is not None})
             if a in seen_now: found[a]['mints_in_scan'] = seen_now[a]['mints']
+    for a in targets:
+        if infos.get(a, {}).get('_read_ok'): found[a]['_refr_at'] = now
     # 名称补读（2026-11-01 03:07 用户问「未命名」：首次批量读 token()/name() 偶发失败后一直为空）
     for a in [a for a in targets if not found[a].get('name')]:
         try:
@@ -498,7 +523,7 @@ def main():
     near_guess = []
     def build_rows():
         watch, near, just_opened, started = [], [], [], []; near_guess.clear()
-        for a in set(targets):
+        for a in set(targets) | skipped_quiet:
             v = found[a]
             if v.get('is_nft'): continue  # NFT 没有开池，不进开池进度
             op, guessed = open_pct(v)
@@ -554,6 +579,7 @@ def main():
     for a in set(targets):
         if a not in stale_set: found[a]['last_open_pct'] = open_pct(found[a])[0]  # 读失败的不更新基线，下轮 Δ 才准
     save()
+    _wd.cancel()
     print(json.dumps({'head': head, 'blocks': head - start + 1, 'scanned_to': scanned_to, 'blocks_left': head - scanned_to, 'log_errors': errors,
                       'read_failed': len(stale_set), 'refreshed': len(set(targets)), 'rpc_failed_calls': RPC_FAIL[0],
                       'rpc_degraded': bool(targets) and len(stale_set) > len(set(targets)) / 2,  # 过半读失败：进度是旧数，巡逻要写「进度读取失败」，不能当作无变化
