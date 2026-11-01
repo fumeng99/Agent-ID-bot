@@ -22,6 +22,7 @@ import codeutil as CU
 
 ST = os.path.join(D, 'heat_state.json'); FOUND = os.path.join(D, 'found.json')
 TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+UPG_TOPICS = ['0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b', '0x1cf3b03a6cf19fa2baba4df148e9dcabedea7f8a5c07840e207e5c089be95d3e']  # Upgraded(address) / BeaconUpgraded(address)
 T1155 = '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62'
 ZERO = '0x' + '0' * 64
 WINDOW_S = 30 * 60; MIN_RECIP = 6; HOT_RECIP = 12; CHUNK = 400; MAX_CHECK = 25
@@ -42,12 +43,14 @@ def main():
     win_blocks = int(WINDOW_S / bt)
     start = max(st.get('last', 0) + 1, head - win_blocks)
     toks = st.setdefault('tokens', {}); checked = st.setdefault('checked', {}); errors = []
-    f = start; scanned_to = start - 1
+    f = start; scanned_to = start - 1; upg_hits = {}
     while f <= head and time.time() < F.DEADLINE - 45:
         t = min(f + CHUNK - 1, head)
         try:
             logs = F._post(F.QN, {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getLogs', 'params': [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [TRANSFER, ZERO]}]}, 30)
             logs2 = F._post(F.QN, {'jsonrpc': '2.0', 'id': 2, 'method': 'eth_getLogs', 'params': [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [T1155, None, ZERO]}]}, 30)
+            logs3 = F._post(F.QN, {'jsonrpc': '2.0', 'id': 3, 'method': 'eth_getLogs', 'params': [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [UPG_TOPICS]}]}, 30)
+            for l in logs3.get('result') or []: upg_hits.setdefault(l['address'].lower(), int(l['blockNumber'], 16))
             if 'result' not in logs or 'result' not in logs2: raise RuntimeError(str(logs.get('error') or logs2.get('error'))[:120])
             for l in logs['result'] + logs2['result']:
                 tp = l['topics']; a = l['address'].lower()
@@ -124,9 +127,21 @@ def main():
             for r in new_agent:
                 if r['fairmint_contract'] in added: checked.pop(r['token'], None)
             added = []
+    # 学 ：已追踪的合约发生代理升级 → 撤销审计通过（autofill 不再打满），并报出来
+    upgraded = []
+    if upg_hits:
+        AOKP = os.path.join(D, 'audit_ok.json'); aok = json.load(open(AOKP)) if os.path.exists(AOKP) else {}
+        tracked = set(found) | set(aok) | {(x.get('token') or '').lower() for x in aok.values() if isinstance(x, dict)}
+        for x, b in upg_hits.items():
+            if x not in tracked: continue
+            upgraded.append({'contract': x, 'block': b, 'name': (found.get(x) or {}).get('name'), 'bscscan': f'https://bscscan.com/address/{x}'})
+            for k, v in aok.items():
+                if isinstance(v, dict) and (k == x or (v.get('token') or '').lower() == x) and v.get('ok'):
+                    v['ok'] = False; v['note'] = f'合约在区块 {b} 发生代理升级，审计作废（{now_cst()}）'
+        if upgraded: json.dump(aok, open(AOKP, 'w'), ensure_ascii=False, indent=1)
     json.dump(st, open(ST + '.tmp', 'w')); os.replace(ST + '.tmp', ST)
     print(json.dumps({'time_cst': now_cst(), 'head': head, 'scanned_blocks': scanned_to - start + 1, 'window_tokens': len(toks),
-                      'candidates_checked': len(cands), 'new_agent': new_agent, 'added_fairmint': added, 'errors': errors}, ensure_ascii=False, indent=1))
+                      'candidates_checked': len(cands), 'new_agent': new_agent, 'added_fairmint': added, 'upgraded_tracked': upgraded, 'errors': errors}, ensure_ascii=False, indent=1))
 
 
 if __name__ == '__main__': main()

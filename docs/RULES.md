@@ -424,3 +424,6 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 「必须有退款函数」作为唯一条件：Jager 模板（币安人、币安无忧、Frogs、JAGENT、币安猫等）合约里都没有退款函数，严格照搬会让 70% 打满永远不触发；改成「退款函数或实测储备」二选一，等用户决定是否要更严。
 - 80–90% 随机门槛、150–200 个 Agent ID 钱包门槛、免费只通知：与用户 60%/70% 和免费全自动规则冲突，未改。
 - 【巡逻第 2 步必做】同时读 discover_out/heatscan.json：new_agent 里 in_seen=false 的项目当作链上新候选（和 chainscan 候选一样先 verify_source.py，free=true 走免费 0 元规则，sample_value_bnb>0 走付费简报/规则 D）；added_fairmint 的合约已并入 found.json，在「▍提醒」写一行「新 fair mint（热度发现）」；errors 非空写进消息。hot=true 的项目在提醒里标「热」。
+- 2026-11-01 16:45 追加（全量优化计划 A 类）：heatscan 同时监听 Upgraded/BeaconUpgraded，已追踪合约或其代币一升级就把 audit_ok 改 ok=false（upgraded_tracked 写进消息）；autofill 加部署者风控（同一部署者 24 小时内 ≥3 个不同名字的盘不打满）；新建每晚 21:00 打新总结任务（含「错过的热盘及原因」）。DexScreener/GeckoTerminal 任意配对开池判断 opencheck 早已有。
+- A 类待做：聪明钱包（历史赢家 ≥2 个同时出手提前检查，只检查不触发买）、开池时模拟转入池子查貔貅、打到后模拟转账查白名单锁、卖出多池最佳报价 + <0.3U 不卖 + 1/2/4 分钟退避 + 各号并行、Flap/Tosh Agent 专属盘只提醒。
+- B 类等用户决定（2026-11-01 16:41 已问）：B1 Agent ID 付 gas 钱包数门槛（建议 100）；B2 退款严格版；B3 分批止盈+移动止损+留 20%；B4 免费币自动卖；B5 自动卖全天；B6 巡逻有事才发；B7 TG 机器人推送。

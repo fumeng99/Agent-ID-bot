@@ -57,6 +57,15 @@ for row in FM.get('watch_unopened', []):
     upg = [(x,) + CU.upgradeable(_rpc, x) for x in [a, _tok] if x]
     bad = [f"{x[0][:6]}…{x[0][-4:]} {x[2] or '读取失败'}" for x in upg if x[1] is not False]
     if bad: out['skipped'].append((row['name'], a, row['open_pct'], '可升级合约或读不到，不自动打满：' + '；'.join(bad))); continue
+    # ③ 学  部署者风控：同一部署者 24 小时内在 found.json 里出现 ≥3 个不同名字的盘（批量发盘）→ 不打满
+    dep = v.get('deployer')
+    if dep:
+        import calendar as _cal
+        def _t(x):
+            try: return _cal.timegm(time.strptime(x.get('first_seen_cst'), '%Y-%m-%d %H:%M')) - 8 * 3600
+            except Exception: return 0
+        sib = {x.get('name') for x in FOUND.values() if x.get('deployer') == dep and time.time() - _t(x) < 86400}
+        if len(sib) >= 3: out['skipped'].append((row['name'], a, row['open_pct'], f'部署者 {dep[:6]}…{dep[-4:]} 24 小时内发了 {len(sib)} 个不同名字的盘，疑似批量发盘，不自动打满')); continue
     # ② 保本：合约有退款函数，或者链上实测资金真的留在开池储备（pendingBnb ≥ 已募资 75%，即国库抽成 ≤20% 加少量误差）。两者都没有不打满。
     pb, tp = v.get('pending_bnb_bnb'), v.get('total_paid_bnb')
     reserve_ok = bool(pb and tp and pb >= 0.75 * tp)
