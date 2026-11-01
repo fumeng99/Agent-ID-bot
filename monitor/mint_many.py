@@ -4,6 +4,14 @@ sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
 from confirm import confirm_tx, bal_of
 from guard import flap_guard
 C=sys.argv[1].lower(); D=sys.argv[2]
+# 规则 B 硬闸（2026-11-01 币安狗狗 claimFree 未验证仍被领后加）：目标合约（代理则含实现）源码必须已验证，否则一笔都不发
+_D=os.path.dirname(os.path.abspath(__file__))
+try:
+    _v=json.loads(subprocess.run(['python3',f'{_D}/verify_source.py',C],capture_output=True,text=True,timeout=90).stdout.splitlines()[0])
+except Exception as _e:
+    _v={'verified':None,'source':f'查询失败 {_e}'}
+if _v.get('verified') is not True:
+    print(('ALL','source_unverified',C,_v.get('source'))); sys.exit(3)
 accts=json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
 B='$AIDBOT_HOME/baw/node_modules/.bin/baw'
 out=[]
