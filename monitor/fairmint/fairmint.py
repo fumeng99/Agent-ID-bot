@@ -257,6 +257,10 @@ def info_many(addrs, prev=None, code_cache=None):
             elif tp and not i.get('open_at_shares'):
                 bps = i.get('treasury_bps') or 0
                 i['open_bnb_progress_pct'] = round(tp * (10000 - bps) / 10000 * 100 / ob, 2); i['open_bnb_est'] = True
+        # 2026-11-01 币安狗狗（BNDOG）：OPEN_AT=1000 但已铸 7700+ 仍未开池；pendingBnb=0、合约 BNB=0，15.5 BNB 募资全部不在合约里
+        # （treasury=部署者 EOA，持续往外转）。真正的开池门槛是 pendingBnb≥OPEN_BNB，份数门槛早已超过却没开 → 份数进度失真。
+        # 规则：份数进度 ≥100% 仍未开池且读得到 pendingBnb 时，以 BNB 储备进度为准；募资 ≥0.1 BNB 而储备为 0 → reserve_missing（资金没留作开池），审计直接不过。
+        if not i.get('opened') and tp and pb is not None and pb == 0 and tp >= 10 ** 17: i['reserve_missing'] = True
         if tp and ob: i['raised_vs_open_bnb_pct'] = round(tp * 100 / ob, 2)  # 仅供参考：总募资/开池注入额，含国库抽成，不作为进度
         for f in ('total_paid_wei', 'open_bnb_wei', 'pending_bnb_wei'):
             if f in i: i[f.replace('_wei', '_bnb')] = i.pop(f) / 1e18
@@ -298,7 +302,9 @@ def guess_cap(a, v):
 
 
 def open_pct(v):
-    op = max(v.get('open_progress_pct') or 0, v.get('open_bnb_progress_pct') or 0)
+    sp, bp = v.get('open_progress_pct'), v.get('open_bnb_progress_pct')
+    if sp is not None and sp >= 100 and bp is not None and not v.get('opened'): return bp, False  # 份数门槛已过没开池：看 BNB 储备
+    op = max(sp or 0, bp or 0)
     if op: return op, False
     return (v.get('open_pct_guess') or 0), bool(v.get('open_pct_guess'))
 
@@ -509,6 +515,7 @@ def main():
             if v.get('deadline_ts'): row['deadline_cst'] = time.strftime('%m-%d %H:%M', time.gmtime(v['deadline_ts'] + 8 * 3600))
             if a in stale_set: row['stale'] = True  # 本轮读数失败，显示的是上一轮的数
             if v.get('open_at_src'): row['open_at_src'] = v['open_at_src']
+            if v.get('reserve_missing'): row['reserve_missing'] = True; row['treasury_bps'] = v.get('treasury_bps'); row['total_paid_bnb'] = v.get('total_paid_bnb')
             if op > 100 and not v.get('opened'):  # 2026-11-01 币安狗狗 582% 仍未开池：开池份数读错（模板不同/免费份也计数），进度不可信
                 row['progress_suspect'] = True; row['open_pct_guess'] = True; guessed = True
             if guessed: row['open_pct_guess'] = True  # 总量是猜的：只提醒，autofill 不自动买
