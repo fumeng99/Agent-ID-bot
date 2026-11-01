@@ -17,7 +17,8 @@ def ai_minters(c, deploy_block=None, budget=40):
     e = cache.get(c) or {'m': [], 'to': (deploy_block or 0) - 1, 'ai': {}}
     m = set(e['m']); head = int(F.rpc('eth_blockNumber', []), 16); t0 = time.time()
     if e['to'] < 0:
-        dep = (json.load(open(os.path.join(D, 'found.json'))).get(c) or {}).get('deploy_block')
+        _f = (json.load(open(os.path.join(D, 'found.json'))).get(c) or {})
+        dep = _f.get('deploy_block') or ((_f.get('first_block_seen') or 0) - 5000 or None)  # 2026-11-01 修：found.json 没有 deploy_block 字段时，用首次发现区块往前 5000 块兜底，否则门槛永远读不到
         if not dep: return None
         e['to'] = dep - 1
     f = e['to'] + 1
