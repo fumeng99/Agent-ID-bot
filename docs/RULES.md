@@ -412,3 +412,4 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 ## 学习笔记（续）
 - 来源仓库 v2.5.7（2026-11-01）：采纳——codeutil.py 按字节码逐条解析代理合约里的实现地址（旧正则会错位漏判）。已有——多节点备用。未采纳——「付手续费的免费铸造当付费、必须有保本才打」（比用户现有授权更严，建议询问用户）；回本后回落 60%、长抱 20%（卖出策略，用户未授权我们的脚本）。
 - 2026-11-01 BNDOG 根因：份数门槛 OPEN_AT=1000 早已超过，但开池实际看 pendingBnb≥OPEN_BNB(16 BNB)；募资 15.5 BNB 全不在合约（pendingBnb=0，treasury=部署者 EOA 持续转出）。现规则：份数≥100% 未开池以 BNB 储备进度为准；募资≥0.1 BNB 且 pendingBnb=0 标 reserve_missing，审计不过、autofill 跳过，汇报写明「资金没留作开池储备」。
+  - 实测（eth_simulateV1 traceTransfers）：BNDOG 每笔铸造 BNB 100% 转给 treasury=部署者 EOA 0x6695…3d3a（已收约 15.6 BNB，余额仅 0.06）；健康盘（币安猫 0xad97、SAFU、币安安、BotAi）是 80% 存 WBNB 储备 + 20% 给 treasury。reserve_missing 盘一律视为「项目方能提走资金」。
