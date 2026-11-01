@@ -103,6 +103,14 @@ def step(found, st, aok):
             out['hot'].append(row)
             if a not in aok: out['pre_audit'].append({'contract': a, 'name': nm, 'open_pct': pct, 'bscscan': row['bscscan']})
         if row['eta_70_min'] is not None and row['eta_70_min'] <= 5: out['urgent'] = True
+        # 动态调整（用户 2026-11-01 17:41「快打满的监控频率应该动态调整」）：预计 15 分钟内到 70% 且还没审计 → 提前审计（只读），70% 时直接打满
+        if row['eta_70_min'] is not None and row['eta_70_min'] <= 15 and a not in aok and 'early_audit' not in s['alerted']:
+            s['alerted'].append('early_audit'); out['urgent'] = True; out.setdefault('early_audit', []).append(row)
+        # 70% 快速通道：已有审计通过结论的盘一跨 70% 立即后台跑 fairmint 刷新 + autofill（autofill 内含全部闸门、加锁、filled 防重复），不等 Agent 接手
+        if pct >= 70 and (aok.get(a) or {}).get('ok') and 'fastfill' not in s['alerted'] and '--no-fastfill' not in argv:
+            s['alerted'].append('fastfill'); out.setdefault('fastfill_started', []).append(a)
+            import subprocess
+            subprocess.Popen(['bash', '-c', f'cd {L} && timeout 110 python3 fairmint/fairmint.py --minutes 10 > discover_out/fairmint.fast.json 2>/dev/null && mv discover_out/fairmint.fast.json discover_out/fairmint.json; timeout 900 python3 autofill.py > discover_out/autofill_fast.json 2>&1'], start_new_session=True)
     out['hot'].sort(key=lambda r: -r['open_pct'])
     return out
 
@@ -118,8 +126,13 @@ def main():
             out['crossings'] += o['crossings']; out['urgent'] = out['urgent'] or o['urgent']
             for k in ('time_cst', 'checked', 'read_failed', 'hot', 'pre_audit'): out[k] = o[k]
         json.dump(st, open(ST + '.tmp', 'w')); os.replace(ST + '.tmp', ST)
-        if out['urgent'] or not LOOP or time.time() + EVERY > t_end: break
-        time.sleep(EVERY)
+        # 动态频率：最快的盘预计 ≤15 分钟到 70% 或进度 ≥55% → 每 5 秒；≤30 分钟或 ≥40% → 每 10 秒；有热盘 → EVERY（20 秒）；没有热盘 → 30 秒
+        etas = [r['eta_70_min'] for r in o['hot'] if r.get('eta_70_min') is not None]; top = max([r['open_pct'] for r in o['hot']] or [0])
+        e = min(etas) if etas else 999
+        gap = 5 if (e <= 15 or top >= 55) else 10 if (e <= 30 or top >= 40) else (EVERY if o['hot'] else max(EVERY, 30))
+        out['interval_s'] = gap
+        if out['urgent'] or not LOOP or time.time() + gap > t_end: break
+        time.sleep(gap)
     print(json.dumps(out, ensure_ascii=False, indent=1))
 
 

@@ -9,6 +9,7 @@ import sys, os, json, time, subprocess
 D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D)
 from rpcpool import batch
 DRY = '--dry' in sys.argv; CAP = 100.0
+import fcntl; _LK = open(f'{D}/autofill.lock', 'w'); fcntl.flock(_LK, fcntl.LOCK_EX)  # 2026-11-01 动态监控：快速进度会直接触发本脚本，加锁防并发重复打满（第二个进程等第一个写完 filled 再读）
 FM = json.load(open(f'{D}/discover_out/fairmint.json')); FOUND = json.load(open(f'{D}/fairmint/found.json'))
 AOK = json.load(open(f'{D}/fairmint/audit_ok.json')) if os.path.exists(f'{D}/fairmint/audit_ok.json') else {}
 LED = f'{D}/autofill.json'; led = json.load(open(LED)) if os.path.exists(LED) else {}
