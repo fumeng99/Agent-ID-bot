@@ -29,3 +29,24 @@ subprocess.Popen(['bash','-c','cd $AIDBOT_DATA && timeout 900 python3 possell.py
 P
   echo '{"possell_daemon":"started"}'
 else echo "{\"possell_daemon\":\"running\",\"heartbeat_age_s\":$hb}"; fi
+# 2026-11-02 16:3x（用户「确保不会遗漏」）：常驻发现进程 discoverd.py（约 60 秒一轮扫新 Minted / 新部署合约 / PairCreated，块游标持久化不跳块；
+# 每小时自己拉起一次对账）。不设寿命（游标在状态文件里，重启不丢块）；心跳超 180 秒或进程不在就重启；文件锁保证只有一份。
+cd $AIDBOT_DATA
+hb=$(python3 -c "import json,time;print(int(time.time()-json.load(open('discover_out/discoverd_hb.json')).get('heartbeat',0)))" 2>/dev/null || echo 999)
+dpid=$(cat discover_out/discoverd.pid 2>/dev/null)
+if [ -n "$dpid" ] && kill -0 "$dpid" 2>/dev/null && [ "$hb" -lt 180 ]; then echo "{\"discoverd\":\"running\",\"pid\":$dpid,\"heartbeat_age_s\":$hb}"
+else
+  [ -n "$dpid" ] && kill "$dpid" 2>/dev/null && sleep 1
+  python3 - <<'P'
+import subprocess
+subprocess.Popen(['bash','-c','cd $AIDBOT_DATA/fairmint && exec python3 discoverd.py --daemon --every 60 >> ../discover_out/discoverd.log 2>&1'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+P
+  sleep 3; echo "{\"discoverd\":\"started\",\"pid\":$(cat discover_out/discoverd.pid 2>/dev/null || echo null),\"prev_heartbeat_age_s\":$hb}"
+fi
+# 每种常驻进程只留一份：同名进程多于一份时，保留持锁的那份（pid 文件/心跳里的 pid），其余结束
+for spec in "fastprogress.py --daemon:discover_out/fp_daemon.pid" "possell.py --daemon:discover_out/possell_live.json" "discoverd.py --daemon:discover_out/discoverd.pid"; do
+  pat=${spec%%:*}; pf=${spec#*:}
+  keep=$(python3 -c "import json,sys;p=sys.argv[1];t=open(p).read().strip();print(json.loads(t).get('pid','') if t.startswith('{') else t)" "$pf" 2>/dev/null)
+  pids=$(pgrep -f "^python3 $pat" || true); n=$(echo "$pids" | grep -c . || true)
+  if [ "${n:-0}" -gt 1 ] && [ -n "$keep" ]; then for p in $pids; do [ "$p" != "$keep" ] && kill "$p" 2>/dev/null; done; echo "{\"dedup\":\"$pat\",\"had\":$n,\"kept\":$keep}"; fi
+done

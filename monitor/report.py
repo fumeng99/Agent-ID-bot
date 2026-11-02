@@ -71,6 +71,7 @@ def fm_line(r, bu, found):
     elif r.get('can_open_early') == 'anyone_after_deadline': tags.append(f"到期后任何人可开池{('（' + r['deadline_cst'] + '）') if r.get('deadline_cst') else ''}")
     if r.get('has_refund'): tags.append('有退款函数')
     if r.get('premint'): tags.append('已部署未开铸' if not r.get('total_minted') else '刚开铸')
+    if r.get('backfill'): tags.append('补漏')
     d = r.get('delta_pct') or 0
     line = f"{head}｜{price_u(r, bu)}｜{prog}｜Δ{d:+.1f}"
     if v.get('token'): line += '｜' + md('代币', tok_url(v['token']))
@@ -86,7 +87,8 @@ def cmd_fairmint():
     bu = bnb_u()
     if fm.get('rpc_degraded'): print(f"⚠️ 本轮 {fm.get('read_failed')} 个盘进度读取失败（RPC 限流），下面标「本轮读取失败」的是上轮数")
     sec = [('▍刚开池', fm.get('just_opened', [])), ('▍≥60% / 单轮暴涨', fm.get('near_open', [])), ('▍猜测总量 ≥60%（先核实总量）', fm.get('near_open_guess', [])),
-           ('▍刚开铸', fm.get('mint_started', [])), ('▍已部署未开铸（新）', fm.get('premint_new', []))]
+           ('▍刚开铸', fm.get('mint_started', [])), ('▍已部署未开铸（新）', fm.get('premint_new', [])),
+           ('▍补漏（每小时对账发现主扫描漏掉的盘，已补入监控）', fm.get('discoverd_backfill', []))]
     for title, rows in sec:
         if not rows: continue
         print(title)

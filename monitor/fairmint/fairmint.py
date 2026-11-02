@@ -371,7 +371,8 @@ def predeploy(st, found, start, head):
     # 2026-11-02：QuickNode 停用后按地址 getLogs 也只剩 48club 能查宽区间（1000 块约 8 秒）。改为 500 块一段 4 线程并发、
     # 本步最多用到总时限的 55%；落后超过 12000 块（约 1.5 小时）只补最近 12000 块（这一步只是「已部署未开铸」预警，
     # 真正开铸的盘仍由主扫描的 Minted 事件发现，不会漏）。
-    pf = max(pf, head - 48000, head - 12000); hashes = {}
+    # 2026-11-02 16:3x：去掉「落后超过 12000 块只补最近 12000 块」（会跳块）。改为从断点续扫，本轮扫不完下轮接着扫；常驻 discoverd.py 也同时在扫。
+    hashes = {}
     from concurrent.futures import ThreadPoolExecutor
     pend = T0 + (DEADLINE - T0) * 0.4
     psegs = [(x, min(x + RANGE - 1, head)) for x in range(pf, head + 1, RANGE)]
@@ -473,6 +474,30 @@ def _watchdog():
     return t
 
 
+def _take_announce(found):
+    """读并清空 discoverd_announce.json（常驻发现进程的公告队列）。返回各列表；读不到就全空，不影响本轮。"""
+    out = {'new': [], 'premint_new': [], 'agentid_deployed': [], 'backfill': []}
+    p = os.path.join(SD, 'discoverd_announce.json')
+    if not os.path.exists(p): return out
+    import fcntl as _f
+    try:
+        lk = open(p + '.lock', 'w'); _f.flock(lk, _f.LOCK_EX)
+        try:
+            q = json.load(open(p)); json.dump([], open(p + '.tmp', 'w')); os.replace(p + '.tmp', p)
+        finally: _f.flock(lk, _f.LOCK_UN)
+    except Exception: return out
+    for x in q:
+        if x.get('kind') == 'agentid_deployed': out['agentid_deployed'].append(dict(x.get('row') or {}, backfill=bool(x.get('backfill')))); continue
+        a = x.get('contract'); v = found.get(a)
+        if not v: continue
+        r = {k: v.get(k) for k in ('name', 'symbol', 'token', 'template', 'open_at_shares', 'total_minted', 'opened', 'cost_1share_bnb', 'deployer',
+                                    'first_seen_cst', 'first_block_seen', 'source', 'bscscan', 'premint')}
+        r['contract'] = a; r['open_pct'] = open_pct(v)[0]; r['discovered_by'] = v.get('discovered_by')
+        if x.get('backfill'): r['backfill'] = True; out['backfill'].append(r)
+        out['premint_new' if x.get('kind') == 'premint_new' else 'new'].append(r)
+    return out
+
+
 def main():
     _wd = _watchdog()
     mins = 30; hours = 0
@@ -497,7 +522,9 @@ def main():
         bt = max(0.2, (int(b1['timestamp'], 16) - int(b0['timestamp'], 16)) / 2000)
     except Exception: pass
     back = int((hours * 3600 if hours else mins * 60) / bt)
-    start = head - back if hours else max(st.get('last', 0) + 1, head - back)
+    # 2026-11-02 16:3x（用户「确保不会遗漏」）：原来 start = max(上次+1, head-30 分钟)，落后超过 30 分钟中间的块直接跳过。
+    # 改为严格从上次断点续扫（只有第一次、没有断点时才回看 --minutes）；本轮扫不完的下轮接着扫，绝不跳块。
+    start = head - back if hours else (st['last'] + 1 if st.get('last') else head - back)
     seen_now, errors = {}, 0
     # 2026-11-01 审计：原来某段 getLogs 失败就 f=t+1 跳过、且最后无条件 st['last']=head —— 失败段里的新盘永久漏掉。
     # 现在失败段换节点重试 2 次（缩小区间），仍失败就停在这里，st['last'] 只推进到最后一段成功的块，下轮从断点续扫。
@@ -660,7 +687,15 @@ def main():
         if a not in stale_set: found[a]['last_open_pct'] = open_pct(found[a])[0]  # 读失败的不更新基线，下轮 Δ 才准
     save()
     _wd.cancel()
-    print(json.dumps({'head': head, 'blocks': head - start + 1, 'scanned_to': scanned_to, 'blocks_left': head - scanned_to, 'log_errors': errors,
+    # 2026-11-02：常驻 discoverd.py（约 60 秒一轮）/每小时对账发现的盘，已直接写进 found.json；这里把它们并进本轮 new / premint_new /
+    # agentid_deployed 输出，巡逻照常出简报；对账补进来的另列 backfill（巡逻写「补漏」）。队列消费后清空。
+    ann = _take_announce(found)
+    for r in ann['new']:
+        if r['contract'] not in {x.get('contract') for x in new}: new.append(r)
+    for r in ann['premint_new']:
+        if r['contract'] not in {x.get('contract') for x in pre_new}: pre_new.append(r)
+    pre_other = pre_other + ann['agentid_deployed']
+    print(json.dumps({'head': head, 'discoverd_backfill': ann['backfill'], 'blocks': head - start + 1, 'scanned_to': scanned_to, 'blocks_left': head - scanned_to, 'log_errors': errors,
                       'read_failed': len(stale_set), 'refreshed': len(set(targets)), 'rpc_failed_calls': RPC_FAIL[0],
                       'rpc_degraded': bool(targets) and len(stale_set) > len(set(targets)) / 2,  # 过半读失败：进度是旧数，巡逻要写「进度读取失败」，不能当作无变化
                       'early_open_capable': sorted({r['contract'] for r in watch if r.get('can_open_early')}), 'active_contracts': len(seen_now), 'elapsed_s': round(time.time() - T0, 1), 'rechecks': rechecks,
