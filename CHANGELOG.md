@@ -1,5 +1,18 @@
 # 更新日志
 
+## 2026-11-02
+### 修复
+- `minters.py`：Agent ID 铸造钱包数读失败被当成「不足 100」。根因是段长 10000 块超过节点 5000 块上限；改为 publicnode 4000 块/段（429 退避）+ 48.club 500 块/段兜底，逐段落盘缓存；读不到返回 `status: unknown`，不再返回 None。
+- `autofill.py`：铸造钱包数 / 可升级检查 / 源码验证读失败时换节点重试 3 次，仍失败标 unknown（本轮不买、不当不达标），写 `discover_out/autofill_recheck.json`，`fastprogress` 常驻 45–60 秒后重跑 autofill（全部闸门不变）。
+- `autoaudit.py`：每项检查区分「不合格 / 读失败」；读失败重试（≥60% 的盘 `--priority` 重试 5 次、独立 RPC 冷却表），只有读失败时不写 `audit_ok.json`，改写 `audit_pending.json`，60 秒内重审；国库抽成在 found.json 缺失时链上直读；非 Jager 模板用 `--report` 出通用审计到 `audit_report.json`（不进 autofill）。
+- `fastprogress.py`：自动审计无结论（读失败或超时）60 秒后重审；≥60% 非 Jager 盘出通用审计；核心字段读空的盘同轮换节点再读一次。
+- `verify_source.py`：Sourcify 无记录 + OKLink 读失败原来被当「未验证」，现返回 `verified: null`（不缓存，下轮重查）；代理槽读失败不再当「非代理」放过。
+- `riskcheck.py`：限流/节点错误不再被当成 revert；貔貅模拟只有明确 revert 才判貔貅，读失败记 `read_errors`。
+- `precheck.py` / `hotfree_unverified.py` / `opencheck.py` / `possell.py` / `fast_sell.py`：读失败重试并标 unknown（`unknown` 状态、`verify_pending`、`price_unknown`、报价读失败不计入放弃次数），不再默默丢弃。`opencheck.py` 价格改为 DexScreener/Gecko 批量查询。
+### 新增
+- `hotprogress.py`：免费盘铸造进度（已铸/总量/%、近 30 分钟铸造次数），常见函数 → 子合约 → 签名库函数名三级读取；`hotfree_unverified.py` 每行带进度，读不到写「进度读不到」。
+- `backtest/collect.py`、`backtest/evaluate.py`：近 48 小时被跳过项目的只读回测。
+
 ## 2026-11-01
 ### 新增
 - approvals_watch.py：授权巡检（只读 baw approvals list，新增授权只提醒不撤销），接入 discover_all

@@ -25,9 +25,22 @@ def one(a, b):
     if PCT >= 100: qty = '%.6f' % (int(b, 16) // 10**(dec-6) / 1e6) if dec >= 6 else str(int(b, 16) / 10**dec)
     env = dict(os.environ, HOME=a['home'], npm_config_cache='/tmp/npmcache')
     if not DRY:  # 2026-11-01 D：每号先 quote 预演，失败不下单
-        qr = subprocess.run([B, 'market-order', 'quote', '--binanceChainId', '56', '--fromTokenQty', qty, '--fromToken', T, '--toToken', U, '--slippage', SLIP, '--json'], env=env, capture_output=True, text=True, timeout=60)
-        try: assert json.loads(qr.stdout).get('data')
-        except Exception: return a['label'], {'qty': qty, 'error': 'quote 预演失败，未下单：' + (qr.stdout + qr.stderr)[:160]}
+        # 2026-11-02：quote 是只读报价。网络/超时/限流类失败（非业务拒绝）重试 3 次、退避 1/2 秒；仍失败标 quote_unknown（possell 不计入放弃次数）
+        qerr = None
+        for _k in range(3):
+            try:
+                qr = subprocess.run([B, 'market-order', 'quote', '--binanceChainId', '56', '--fromTokenQty', qty, '--fromToken', T, '--toToken', U, '--slippage', SLIP, '--json'], env=env, capture_output=True, text=True, timeout=60)
+                txt = qr.stdout + qr.stderr
+            except subprocess.TimeoutExpired: txt = 'timeout'
+            try:
+                if json.loads(qr.stdout).get('data'): qerr = None; break
+            except Exception: pass
+            qerr = txt[:160]
+            if not any(k in txt.lower() for k in ('timeout', 'timed out', 'econn', 'network', '429', 'too many', '502', '503', '504', 'socket', 'fetch failed')): break  # 业务拒绝（如 No liquidity）不重试
+            time.sleep(1 + _k)
+        if qerr is not None:
+            net = any(k in qerr.lower() for k in ('timeout', 'timed out', 'econn', 'network', '429', 'too many', '502', '503', '504', 'socket', 'fetch failed'))
+            return a['label'], {'qty': qty, 'error': ('quote_unknown 报价读取失败（已重试 3 次），未下单：' if net else 'quote 预演失败，未下单：') + qerr}
     cmd = [B, 'market-order', 'quote' if DRY else 'swap', '--binanceChainId', '56', '--fromTokenQty', qty, '--fromToken', T, '--toToken', U, '--slippage', SLIP, '--json']
     if not DRY: cmd[-1:-1] = ['--gasLevel', GAS]
     r = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=150)

@@ -42,6 +42,15 @@ def topup_bnb(need_bnb, bnbu):
         res.append((x['label'], 'swap', amt, r.stdout.strip()[-160:]))
     if any(t[1] == 'swap' for t in res): time.sleep(20)
     return res
+RECHK = f'{D}/discover_out/autofill_recheck.json'
+try: recheck = json.load(open(RECHK))
+except Exception: recheck = {}
+_rc_seen = set()
+def mark_unknown(row, a, why):
+    """读失败 → unknown：本轮不买、不记 filled、不当不达标；60 秒内由 fastprogress 常驻重跑本脚本。"""
+    e = recheck.get(a) or {'first_cst': time.strftime('%H:%M:%S', time.gmtime(time.time() + 8 * 3600)), 'n': 0}
+    e.update(name=row['name'], open_pct=row['open_pct'], reason=why[:300], at=time.time(), n=e.get('n', 0) + 1); recheck[a] = e; _rc_seen.add(a)
+    out.setdefault('unknown', []).append((row['name'], a, row['open_pct'], why[:300] + '｜unknown：本轮不买，60 秒内重读'))
 for row in FM.get('watch_unopened', []):
     a = row['contract'].lower(); v = FOUND.get(a, {})
     if row['open_pct'] < 70 or v.get('opened'): continue
@@ -55,9 +64,20 @@ for row in FM.get('watch_unopened', []):
     sys.path.insert(0, D); import codeutil as CU
     from rpcpool import rpc as _rpc
     _tok = (AOK.get(a) or {}).get('token') or v.get('token')
-    upg = [(x,) + CU.upgradeable(_rpc, x) for x in [a, _tok] if x]
-    bad = [f"{x[0][:6]}…{x[0][-4:]} {x[2] or '读取失败'}" for x in upg if x[1] is not False]
-    if bad: out['skipped'].append((row['name'], a, row['open_pct'], '可升级合约或读不到，不自动打满：' + '；'.join(bad))); continue
+    # 2026-11-02：读失败换节点重试 3 次（退避），仍读不到 → unknown（本轮不买、60 秒内重读），不再和「可升级」混为一谈
+    upg = []
+    for x in [a, _tok]:
+        if not x: continue
+        rr = None
+        for k in range(3):
+            rr = CU.upgradeable(_rpc, x)
+            if rr[0] is not None: break
+            time.sleep(1.5 * 2 ** k)
+        upg.append((x,) + rr)
+    bad = [f"{x[0][:6]}…{x[0][-4:]} {x[2]}" for x in upg if x[1] is True]
+    if bad: out['skipped'].append((row['name'], a, row['open_pct'], '可升级合约，不自动打满：' + '；'.join(bad))); continue
+    unk = [f"{x[0][:6]}…{x[0][-4:]} 读取失败：{x[2]}" for x in upg if x[1] is None]
+    if unk: mark_unknown(row, a, '可升级检查读不到（已重试 3 次）：' + '；'.join(unk)); continue
     # ③ 学  部署者风控：同一部署者 24 小时内在 found.json 里出现 ≥3 个不同名字的盘（批量发盘）→ 不打满
     dep = v.get('deployer')
     if dep:
@@ -68,12 +88,16 @@ for row in FM.get('watch_unopened', []):
         sib = {x.get('name') for x in FOUND.values() if x.get('deployer') == dep and time.time() - _t(x) < 86400}
         if len(sib) >= 3: out['skipped'].append((row['name'], a, row['open_pct'], f'部署者 {dep[:6]}…{dep[-4:]} 24 小时内发了 {len(sib)} 个不同名字的盘，疑似批量发盘，不自动打满')); continue
     # ④ B1（用户 2026-11-01 16:47「按照你推荐来」）：至少 100 个持 .ai 身份的不同钱包在打，防项目方自己灌进度；读不到当不达标
+    # 2026-11-02 修（13:40 BscAgentID 读失败被当不达标）：读失败换节点重试 3 次（退避），仍失败标 unknown —— 不当通过，也不当不达标；
+    # 本轮不买，写 discover_out/autofill_recheck.json，fastprogress 常驻 60 秒内重读后再触发本脚本（全部闸门照旧）。
     try:
         sys.path.insert(0, f'{D}/fairmint'); import minters as _MN
-        mr = _MN.ai_minters(a, v.get('deploy_block'), budget=30)
-    except Exception as ex: mr = None
-    if not mr or mr['ai_minters'] < 100:
-        out['skipped'].append((row['name'], a, row['open_pct'], f"Agent ID 铸造钱包不足 100（{'读不到' if not mr else str(mr['ai_minters']) + ' 个，共 ' + str(mr['minters']) + ' 个地址'}），疑似自灌进度，不自动打满")); continue
+        mr = _MN.ai_minters_retry(a, v.get('deploy_block'), budget=30, tries=3)
+    except Exception as ex: mr = {'status': 'unknown', 'reason': f'异常 {str(ex)[:150]}'}
+    if mr.get('status') != 'ok':
+        mark_unknown(row, a, f"Agent ID 铸造钱包数读不到（已重试 {mr.get('tries', 3)} 次）：{mr.get('reason')}"); continue
+    if mr['ai_minters'] < 100:
+        out['skipped'].append((row['name'], a, row['open_pct'], f"Agent ID 铸造钱包不足 100（{mr['ai_minters']} 个，共 {mr['minters']} 个地址），疑似自灌进度，不自动打满")); continue
     # ④b 学 -tools v0.4.1 devcheck：单个地址铸了 >30% 的事件 = 项目方自己刷进度的诱饵盘，不打满（只会更严；事件数 <20 时不判）
     if mr.get('top_share') and mr.get('mint_events', 0) >= 20 and mr['top_share'] > 0.3 and mr['minters'] >= 2:
         out['skipped'].append((row['name'], a, row['open_pct'], f"单个地址 {mr['top_minter'][:6]}…{mr['top_minter'][-4:]} 占了 {mr['top_share']*100:.0f}% 的铸造事件，疑似自灌进度，不自动打满")); continue
@@ -84,8 +108,14 @@ for row in FM.get('watch_unopened', []):
         out['skipped'].append((row['name'], a, row['open_pct'], f"没有退款函数，且开池储备未实测达标（pendingBnb={pb}，已募资={tp} BNB），不自动打满")); continue
     ok = AOK.get(a)
     if not (ok and ok.get('ok')): out['skipped'].append((row['name'], a, row['open_pct'], '未通过/未做 60% 审计')); continue
-    vs = json.loads(subprocess.run(['python3', f'{D}/verify_source.py', a], capture_output=True, text=True, timeout=60).stdout.splitlines()[0])
-    if not vs.get('verified'): out['skipped'].append((row['name'], a, '源码未验证')); continue
+    vs = {}
+    for k in range(3):
+        try: vs = json.loads(subprocess.run(['python3', f'{D}/verify_source.py', a], capture_output=True, text=True, timeout=60).stdout.splitlines()[0])
+        except Exception as ex: vs = {'verified': None, 'source': f'异常 {str(ex)[:80]}'}
+        if vs.get('verified') is not None: break
+        time.sleep(2 * 2 ** k)
+    if vs.get('verified') is None: mark_unknown(row, a, f"源码验证查询失败（已重试 3 次）：{vs.get('source')}"); continue
+    if not vs.get('verified'): out['skipped'].append((row['name'], a, row['open_pct'], '源码未验证')); continue
     tu = v.get('cost_1share_token_units'); per_u = tu if tu else (v.get('cost_1share_bnb') or 0) * BNBU
     NACC = len(json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json')))
     each = per_u * 10  # 基础额度 10 份/号（fair_buy 按实际剩余额度买）
@@ -107,4 +137,9 @@ for row in FM.get('watch_unopened', []):
         led.setdefault('filled', {})[a] = True; spent += est
         for l in accs: per_acc[l] = per_acc.get(l, 0) + each
         json.dump(led, open(LED, 'w'), ensure_ascii=False, indent=1)
+_proc = {r['contract'].lower() for r in FM.get('watch_unopened', []) if r.get('open_pct', 0) >= 70}
+for _a in list(recheck):
+    if _a not in _rc_seen and (_a in _proc or time.time() - recheck[_a].get('at', 0) > 3600): recheck.pop(_a)  # 本轮已有确定结论（买/跳过）或 1 小时前的旧条目 → 移除
+if not DRY: json.dump(recheck, open(RECHK + '.tmp', 'w'), ensure_ascii=False); os.replace(RECHK + '.tmp', RECHK)
+out['recheck_pending'] = list(recheck)
 print(json.dumps(out, ensure_ascii=False))

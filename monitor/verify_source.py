@@ -26,11 +26,21 @@ def one(a,cache):
     a=a.lower(); c=cache.get(a)
     if c and (c['verified'] or time.time()-c['t']<1800): return c
     s=sourcify(a); src=None
+    if s=='ERR': time.sleep(1.5); s=sourcify(a)  # 2026-11-02：Sourcify 网络失败先重试一次
     if s and s!='ERR': src='sourcify:'+s
     else:
         o=oklink(a)
         if o is True: src='bscscan/oklink'
-        elif o=='ERR' and s=='ERR': return {'addr':a,'verified':None,'source':'查询失败','t':time.time()}
+        # 2026-11-02 修：原来只有两边都失败才算「查询失败」，Sourcify 404 + OKLink 限流/超时会被当成「未验证」。
+        # 现在 OKLink 读失败（ERR）一律先看字节码指纹，不中就返回 verified=None（unknown，不缓存，下轮重查），不当「未验证」。
+        elif o=='ERR':
+            try:
+                from codefp import fps
+                fp=fps([a]).get(a); ref=json.load(open(FP)) if os.path.exists(FP) else {}
+                hit=[x for x,f in ref.items() if fp and f==fp and x!=a]
+                if hit: src='bytecode-match:'+hit[0]
+            except Exception: pass
+            if not src: return {'addr':a,'verified':None,'source':'查询失败（Sourcify '+('无记录' if s is None else '失败')+'，OKLink 失败）','t':time.time()}
     if not src:
         # 2026-11-01 20:36 用户同意：未验证但字节码指纹（去元数据、PUSH20/32 立即数清零）与某个已验证合约完全一致 → 视为同一份已验证源码
         try:
@@ -57,13 +67,19 @@ if __name__=='__main__':
         try: cache=json.JSONDecoder().raw_decode(open(CF).read())[0]
         except Exception: cache={}
     addrs=[x.lower() for x in sys.argv[1:]]
-    try: slots=batch([('eth_getStorageAt',[a,IMPL,'latest']) for a in addrs],tolerant=True)
-    except Exception: slots=[None]*len(addrs)
+    slots=None
+    for _i in range(3):  # 2026-11-02：代理槽读失败原来当「不是代理」直接放过实现合约检查，现在重试 3 次，仍失败 verified=None
+        try: slots=batch([('eth_getStorageAt',[a,IMPL,'latest']) for a in addrs],tolerant=True); break
+        except Exception: time.sleep(1.5*2**_i)
+    if slots is None: slots=['ERR']*len(addrs)
     for a,sl in zip(addrs,slots):
         r=dict(one(a,cache))
+        if sl=='ERR' or sl is None:
+            if r['verified']: r['verified']=None; r['source']=str(r.get('source'))+'；代理槽读取失败，实现合约未核对'
+            r.pop('t',None); print(json.dumps(r,ensure_ascii=False)); continue
         impl='0x'+sl[-40:] if sl and int(sl,16) else None
         if impl:
             ri=one(impl,cache); r['proxy_impl']=impl; r['impl_verified']=ri['verified']
-            r['verified']=bool(r['verified'] and ri['verified'])
+            r['verified']=(None if (r['verified'] is None or ri['verified'] is None) and not (r['verified'] is False or ri['verified'] is False) else bool(r['verified'] and ri['verified']))
         r.pop('t',None); print(json.dumps(r,ensure_ascii=False))
     tmp=CF+'.%d.tmp'%os.getpid(); json.dump(cache,open(tmp,'w')); os.replace(tmp,CF)

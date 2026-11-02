@@ -35,10 +35,24 @@ def ok(r):
     return isinstance(r, str) and r.startswith('0x') and len(r) > 2
 
 
+DS_ERR = set(); PX_ERR = set()  # 2026-11-02：价格接口读失败的代币（≠ 没开池），输出 price_unknown，下一轮再查
+
+
+def _get_retry(url, tries=3):
+    last = None
+    for i in range(tries):
+        try: return json.load(urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'accept': 'application/json'}), timeout=12))
+        except Exception as e:
+            last = e
+            if getattr(e, 'code', None) == 404: raise
+            time.sleep(1.0 * 2 ** i)
+    raise RuntimeError(str(last)[:120])
+
+
 def dexscreener(t):
     try:
-        req = urllib.request.Request(f'https://api.dexscreener.com/latest/dex/tokens/{t}', headers={'User-Agent': 'Mozilla/5.0'})
-        ps = json.load(urllib.request.urlopen(req, timeout=15)).get('pairs') or []
+        try: ps = _get_retry(f'https://api.dexscreener.com/latest/dex/tokens/{t}').get('pairs') or []
+        except Exception: PX_ERR.add(t); return None
         ps = [p for p in ps if p.get('chainId') == 'bsc' and (p.get('liquidity') or {}).get('usd', 0) > 0]
         if not ps: return None
         p = max(ps, key=lambda p: p['liquidity']['usd'])
@@ -51,9 +65,12 @@ def dexscreener(t):
 def gecko(t):
     """2026-11-01 学  v2.4.5：DexScreener 没收录的池子（PancakeSwap Infinity、Uniswap v4、V3 等）用 GeckoTerminal 补查。"""
     try:
-        req = urllib.request.Request(f'https://api.geckoterminal.com/api/v2/networks/bsc/tokens/{t}/pools', headers={'User-Agent': 'Mozilla/5.0', 'accept': 'application/json'})
         ps = []
-        for p in json.load(urllib.request.urlopen(req, timeout=15)).get('data') or []:
+        try: _d = _get_retry(f'https://api.geckoterminal.com/api/v2/networks/bsc/tokens/{t}/pools', tries=2)
+        except Exception as e:
+            if getattr(e, 'code', None) == 404: return None  # Gecko 没收录 = 确定没查到
+            PX_ERR.add(t); return None
+        for p in _d.get('data') or []:
             a = p.get('attributes') or {}; base = str(((p.get('relationships') or {}).get('base_token') or {}).get('data', {}).get('id', '')).lower().endswith(t)
             px = float((a.get('base_token_price_usd') if base else a.get('quote_token_price_usd')) or 0); liq = float(a.get('reserve_in_usd') or 0)
             if px > 0 and liq > 0: ps.append({'dex': str(((p.get('relationships') or {}).get('dex') or {}).get('data', {}).get('id', 'gecko')), 'pair': a.get('address'),
@@ -108,14 +125,52 @@ for x, t in items:
     calls += [('eth_call', [{'to': V2, 'data': '0xe6a43905' + w(t) + w(q)}, 'latest']) for q in QUOTES]
 try: R = batch(calls, tolerant=True) if calls else []
 except Exception as e: _fallback(f'RPC 失败：{str(e)[:80]}')
-n = len(A) + len(QUOTES); new = []
+n = len(A) + len(QUOTES); res_err = False; new = []; price_unknown = []; bal_unknown = []
+# 2026-11-02：余额/池子读成 None（限流/节点错误）原来当「没持仓」直接跳过。现在把读空的项换节点重读一次，仍空的记 bal_unknown（下一轮再查）
+_miss = [k for k, r in enumerate(R) if r is None]
+if _miss and time.time() < OC_DEADLINE - 8:
+    try:
+        _R2 = _batch([calls[k] for k in _miss], tolerant=True, timeout=6, deadline=OC_DEADLINE, parallel=2)
+        for k, r in zip(_miss, _R2): R[k] = r
+    except Exception: pass
 _held = [t for i, (x, t) in enumerate(items) if any(ok(r) and int(r, 16) for r in R[i * n:i * n + len(A)])]
 from concurrent.futures import ThreadPoolExecutor
-with ThreadPoolExecutor(8) as _ex: DS = dict(zip(_held, _ex.map(lambda t: dexscreener(t) or gecko(t), _held)))
+# 2026-11-02：改批量（DexScreener 30 个/次、Gecko multi 30 个/次），每批失败退避重试 3 次；读失败的进 PX_ERR（price_unknown），不当没开池
+def _ds_batch(ts):
+    try: ps = _get_retry('https://api.dexscreener.com/latest/dex/tokens/' + ','.join(ts)).get('pairs') or []
+    except Exception: PX_ERR.update(ts); DS_ERR.update(ts); return {}
+    o = {}
+    for p in ps:
+        tb = str((p.get('baseToken') or {}).get('address', '')).lower(); lq = (p.get('liquidity') or {}).get('usd', 0) or 0
+        if p.get('chainId') != 'bsc' or tb not in ts or lq <= 0: continue
+        if tb not in o or lq > o[tb]['liq_usd']:
+            o[tb] = {'dex': p.get('dexId'), 'pair': p.get('pairAddress'), 'price_usd': p.get('priceUsd'), 'liq_usd': lq, 'fdv': p.get('fdv'), 'created': p.get('pairCreatedAt'), 'url': p.get('url')}
+    return o
+def _gk_batch(ts):
+    try: ds = _get_retry('https://api.geckoterminal.com/api/v2/networks/bsc/tokens/multi/' + ','.join(ts), tries=2).get('data') or []
+    except Exception: PX_ERR.update(ts); return {}
+    o = {}
+    for d in ds:
+        a = d.get('attributes') or {}; tb = str(a.get('address', '')).lower(); lq = float(a.get('total_reserve_in_usd') or 0)
+        if tb in ts and a.get('price_usd') and lq > 0:
+            o[tb] = {'dex': 'gecko', 'pair': None, 'price_usd': float(a['price_usd']), 'liq_usd': lq, 'fdv': a.get('fdv_usd'), 'created': None,
+                     'url': f'https://www.geckoterminal.com/bsc/tokens/{tb}', 'source': 'geckoterminal'}
+    return o
+DS = {}
+with ThreadPoolExecutor(4) as _ex:
+    for r in _ex.map(_ds_batch, [_held[k:k + 30] for k in range(0, len(_held), 30)]): DS.update(r)
+_miss_px = [t for t in _held if t not in DS]
+with ThreadPoolExecutor(2) as _ex:
+    for r in _ex.map(_gk_batch, [_miss_px[k:k + 30] for k in range(0, len(_miss_px), 30)]): DS.update(r)
+PX_ERR.difference_update(DS)
+for t in _held: DS.setdefault(t, None)
 for i, (x, t) in enumerate(items):
     seg = R[i * n:(i + 1) * n]
     held = sum(int(r, 16) for r in seg[:len(A)] if ok(r))
-    if held == 0: continue
+    if held == 0:
+        _b = seg[:len(A)]
+        if any(r is None for r in _b) and any(r is not None for r in _b): bal_unknown.append(x.get('name') or t)  # 部分号读到、部分号读空 = 读失败；全空多半是非代币合约 revert
+        continue
     pair_onchain = next(('0x' + r[-40:] for r in seg[len(A):] if ok(r) and int(r, 16)), None)
     ds = DS.get(t) if t in DS else (dexscreener(t) or gecko(t))
     if not ds and pair_onchain:
@@ -124,7 +179,10 @@ for i, (x, t) in enumerate(items):
             res = batch([('eth_call', [{'to': pair_onchain, 'data': '0x0902f1ac'}, 'latest'])], tolerant=True)[0]
             if ok(res) and int(res[2:66], 16) and int(res[66:130], 16):
                 ds = {'dex': 'pancakeswap v2', 'pair': pair_onchain, 'price_usd': None, 'liq_usd': None}
-        except Exception: pass
+        except Exception: res_err = True
+    # 只有 DexScreener 读失败、或池子储备读失败，才算「价格未知」（Gecko 免费接口常 429、空池子储备为 0 都不算）
+    if not ds and (t in DS_ERR or (pair_onchain and 'res_err' in dir() and res_err)): price_unknown.append({'name': x.get('name'), 'token': t, 'pair_onchain': pair_onchain})
+    res_err = False
     if not ds: continue
     if ds.get('liq_usd') is not None and ds['liq_usd'] < MINLIQ: continue  # 空池/测试池不算开盘
     try: dec = int(batch([('eth_call', [{'to': t, 'data': '0x313ce567'}, 'latest'])], tolerant=True)[0] or '0x12', 16)
@@ -154,6 +212,7 @@ for i, (x, t) in enumerate(items):
 
 _wd.cancel()
 if new and not DRY: json.dump(S, open(SEEN + '.tmp', 'w'), ensure_ascii=False, indent=1); os.replace(SEEN + '.tmp', SEEN)
-out = {'checked': len(items), 'held': len(_held), 'new_open': new, 'elapsed_s': round(time.time() - T0, 1)}
+out = {'checked': len(items), 'held': len(_held), 'new_open': new, 'elapsed_s': round(time.time() - T0, 1),
+       'price_unknown': price_unknown, 'balance_unknown': bal_unknown[:30], 'balance_unknown_n': len(bal_unknown)}
 if not DRY: json.dump(dict(out, new_open=[], time=time.strftime('%Y-%m-%d %H:%M', time.gmtime(time.time() + 8 * 3600))), open(LAST, 'w'), ensure_ascii=False)
 print(json.dumps(out, ensure_ascii=False))

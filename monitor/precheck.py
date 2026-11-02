@@ -45,12 +45,22 @@ def errname(sel):
     errc[sel] = name or sel
     return errc[sel]
 
+sys.path.insert(0, D)
+from rpcpool import call_strict
 def call(frm, to, data):
     try:
         rpc('eth_call', [{'from': frm, 'to': to, 'data': data}, 'latest']); return 'ok', ''
     except Exception as e:
         s = str(e); m = re.search(r"0x[0-9a-fA-F]{8,}", s.split('data')[-1]) or re.search(r"0x[0-9a-fA-F]{8,}", s)
-        if not m: return 'err', s[:120]
+        if not m:
+            if 'revert' in s.lower(): return 'revert', 'revert（无原因）'
+            # 2026-11-02：不是 revert 的错误（限流/超时/节点故障）= 读失败，换 rpcpool 节点重试 3 次（退避），仍失败标 unknown，下一轮重查，不当 revert
+            for i in range(3):
+                st, r = call_strict(to, data, frm)
+                if st == 'ok': return 'ok', ''
+                if st == 'revert': return 'revert', r[:120]
+                time.sleep(1.0 * 2 ** i)
+            return 'unknown', 'RPC 读取失败（已重试 3 次）：' + s[:80]
         h = m.group(0).lower(); sel = h[:10]
         if sel == '0x08c379a0' and len(h) > 138:
             try:
@@ -84,14 +94,15 @@ for c in items():
         st, why = call(a['bsc'], t, data); per[a.get('label') or a.get('name') or a['bsc'][:8]] = why if st != 'ok' else 'ok'
         if 'SoldOut' in why or 'sold out' in why.lower(): break
     oks = [k for k, v in per.items() if v == 'ok']
-    reasons = sorted({v for v in per.values() if v != 'ok' and not str(v).startswith('skip_account')})
+    unk = [k for k, v in per.items() if str(v).startswith('RPC 读取失败')]
+    reasons = sorted({v for v in per.values() if v != 'ok' and not str(v).startswith('skip_account') and not str(v).startswith('RPC 读取失败')})
     paid = any(k in r for r in reasons for k in ('WrongPayment', 'InsufficientPayment', 'IncorrectPayment', 'InvalidPayment', 'insufficient'))
-    status = 'mintable' if oks else ('soldout' if any('SoldOut' in r or 'sold out' in r.lower() for r in reasons) else ('paid' if paid else 'revert'))
+    status = 'mintable' if oks else ('soldout' if any('SoldOut' in r or 'sold out' in r.lower() for r in reasons) else ('paid' if paid else ('unknown' if unk and not reasons else 'revert')))
     if status == 'soldout': sold[t] = {'name': c.get('name'), 'at': time.strftime('%Y-%m-%d %H:%M')}
     res.append({'name': c.get('name'), 'target': t, 'selector': sel, 'source': c.get('source', 'transfer_mint'), 'status': status, 'ok_accounts': oks,
-                'reasons': reasons, 'bscscan': c.get('bscscan')})
+                'reasons': reasons, 'unknown_accounts': unk, 'bscscan': c.get('bscscan')})
 
-order = {'mintable': 0, 'not_checked': 1, 'revert': 2, 'paid': 3, 'soldout': 4, 'skip_permanent': 5}
+order = {'mintable': 0, 'not_checked': 1, 'unknown': 1, 'revert': 2, 'paid': 3, 'soldout': 4, 'skip_permanent': 5}
 res.sort(key=lambda r: order.get(r['status'], 9))
 json.dump(sold, open(SOLD, 'w'), ensure_ascii=False, indent=1)
 json.dump(errc, open(ERRCACHE, 'w'), ensure_ascii=False, indent=1)

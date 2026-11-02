@@ -108,6 +108,13 @@ def step(st, out):
     pos = positions(); toks = list(pos)
     if not toks: return
     pr = prices(toks); bu = bnb_u()
+    if bu is None:  # 2026-11-02：BNB 价读失败 → 付费仓位倍数算不出，重试 2 次，仍失败记 unknown（不当没触发也不乱卖）
+        for _k in range(2):
+            time.sleep(1 + _k); bu = bnb_u()
+            if bu: break
+        if not bu: out.setdefault('unknown', []).append('BNB/USDT 报价读取失败，本轮付费仓位倍数未判断')
+    _miss = [t for t in toks if t not in pr and st.get(t, {}).get('last')]  # 之前读到过价格（已开池）、这轮读不到 = 价格源失败
+    if _miss: out.setdefault('unknown', []).append('价格读取失败：' + '、'.join(pos[t]['name'] or t[:8] for t in _miss[:10]))
     dec = dict(zip(toks, batch([('eth_call', [{'to': t, 'data': '0x313ce567'}, 'latest']) for t in toks], tolerant=True)))
     calls = [(t, l) for t in toks if t in pr for l in pos[t]['acc'] if l in LAB]
     bals = batch([('eth_call', [{'to': t, 'data': '0x70a08231' + LAB[l][2:].rjust(64, '0')}, 'latest']) for t, l in calls], tolerant=True) if calls else []
@@ -125,8 +132,16 @@ def step(st, out):
             holder = next(((l, bal[(t, l)]) for l in P['acc'] if bal.get((t, l))), None)
             if holder:
                 amt = int(holder[1] * 10 ** int(dec[t], 16) / 100) or 1
-                r = batch([('eth_call', [{'from': LAB[holder[0]], 'to': t, 'data': '0xa9059cbb' + q['pair'][2:].rjust(64, '0') + hex(amt)[2:].rjust(64, '0')}, 'latest'])], tolerant=True)[0]
-                s['hp'] = 'ok' if isinstance(r, str) and (r in ('0x',) or (len(r) >= 66 and int(r[:66], 16) == 1)) else 'fail'
+                # 2026-11-02：原来 batch 读失败返回 None 也记成 fail（永久不自动卖）。现在用 call_strict：明确 revert 才 fail，读失败 = unknown，下一轮重查
+                from rpcpool import call_strict
+                stt, r = 'unknown', None
+                for _k in range(3):
+                    stt, r = call_strict(t, '0xa9059cbb' + q['pair'][2:].rjust(64, '0') + hex(amt)[2:].rjust(64, '0'), LAB[holder[0]])
+                    if stt != 'unknown': break
+                    time.sleep(1 + _k)
+                if stt == 'unknown':
+                    out.setdefault('unknown', []).append(f"{P['name']}｜貔貅模拟读取失败（已重试 3 次），下一轮重查"); continue
+                s['hp'] = 'ok' if stt == 'ok' and isinstance(r, str) and (r in ('0x',) or (len(r) >= 66 and int(r[:66], 16) == 1)) else 'fail'
                 if s['hp'] == 'fail': out['alerts'].append(f"{P['name']}｜模拟转入池子失败（疑似貔貅/转账锁/白名单），不自动卖，请人工确认｜{q['url']}")
         if s.get('hp') == 'fail': continue
         acts = {}  # (kind, pct) -> [labels]
@@ -189,6 +204,9 @@ def step(st, out):
                     elif '长抱' in kind: sa['moon'] = True
                     else: sa['done'] = True
                     out['sold'].append({'name': P['name'], 'token': t, 'acc': l, 'why': kind, 'pct': pct, 'value_u': round(v * pct / 100, 2), 'order': r.get('orderId') if isinstance(r, dict) else r, 'url': q['url']})
+                elif isinstance(r, dict) and 'quote_unknown' in str(r.get('error', '')):
+                    # 2026-11-02：报价读失败（网络/限流）≠ 卖不掉：不计失败次数、不放弃，60 秒后重试
+                    sa['next'] = time.time() + 60; sa['last_err'] = str(r)[:200]; out.setdefault('unknown', []).append(f"{P['name']}｜{l}｜{kind}：报价读取失败，60 秒后重试")
                 else:
                     sa['fail'] = sa.get('fail', 0) + 1; sa['next'] = time.time() + 60 * 2 ** min(sa['fail'] - 1, 5)
                     sa['last_err'] = str(r)[:200]  # 2026-11-02：<3U 的小仓失败原来不记原因（币安安放弃后查不到为什么），现在每次都记最后一次错误
@@ -205,6 +223,7 @@ def main():
     out = {'time_cst': now(), 'night': night(), 'sold': [], 'alerts': [], 'notify': [], 'errors': []}
     end = time.time() + LOOP
     while True:
+        out['unknown'] = []  # 2026-11-02：读失败项只保留最近一轮（常驻循环不累积刷屏）
         try: step(st, out)
         except Exception as e: out['errors'].append(f'step: {str(e)[:160]}')
         if not DRY: json.dump(st, open(ST + '.tmp', 'w'), ensure_ascii=False); os.replace(ST + '.tmp', ST)

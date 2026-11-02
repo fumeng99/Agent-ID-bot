@@ -480,3 +480,15 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 自检修复：discover_all.sh 末尾跑 selfheal.py：某步连续失败第 3/6/9… 轮时清 rpcpool 冷却、体检节点、缩小范围重跑一次，成功覆盖输出并清零；仍失败才进 fail_streak alert（含 selfheal 字段）。
 - 免费盘永久跳过：seen.json 条目 `skip_permanent:true`（整盘不再预检/补领）、`skip_accounts:{号:原因}`（该号不再算 ok_accounts、不补领）。DOG 0xa7be…936a：mint 需授权扣代币（token spending limit not approved），非纯免费，永久跳过。NULLSECTOR 0x9395…73cd 002/海贼王：资格正常但 mintFree 全合集每 10 块 1 个免费槽、全局抢槽，上链被抢先 revert（SlotNotOpen），永久跳过不再重试。
 - 币安安 0x4220…1d：每号约 0.45U（≥0.3U）、冲击约 1%，但币安钱包 market-order quote 报「No liquidity available」（换 USDT/WBNB 都一样，只有 PancakeSwap V2 一个约 82U 的小池，路由不收录）→ 预演不过按规则 D 不下单；06:15 放弃保持。possell 现在小仓失败也记 last_err。
+
+## 2026-11-02 14:xx「读失败 ≠ 不达标」修复（不放宽任何买卖闸门：源码验证/字节码一致、70%、Agent ID 铸造钱包 ≥100、国库 ≤20%、不可升级、minter==mint、非貔貅、每号每天 ≤100U 全部照旧）
+- 三态：每个闸门/检查结果只有「通过 / 不合格（链上明确读到）/ unknown（超时、429、节点错误、查询失败）」。unknown 一律：不当通过（不买）、也不当永久不达标（不写失败缓存），换 rpcpool 节点重试（最多 3 次、退避），仍失败 60 秒内重读。
+- 13:40 BscAgentID 根因：QuickNode 停用后 minters.py 一段扫 10000 块，超过 LOGS_RPCS 5000 块上限 → 每次读失败 → autofill 当「不足 100」。现在 minters 走 publicnode 4000 块/段（429 退避）+ 48.club 500 块/段兜底，逐段落盘；返回 status ok/unknown。
+- autofill：铸造钱包数/可升级/源码验证读失败 → unknown，写 discover_out/autofill_recheck.json；fastprogress 常驻 45–60 秒后重跑 autofill（锁 + filled 防重复，闸门不变）。巡逻看 autofill 输出的 unknown 列表写进「▍提醒」（不是「⚠️ 需处理」）。
+- autoaudit：读失败不写 audit_ok.json，写 fairmint/audit_pending.json；fastprogress 60 秒后重审（自动审计超时没结论的也重审）；进度 ≥60% 带 --priority（重试 5 次、独立 RPC 冷却表 /tmp/rpcpool_cool_audit_prio.json = 单独限流预算）。国库抽成 found.json 缺失时链上直读 TREASURY_BPS()：节点失败=unknown，函数不存在=无法确认（Jager 模板仍判不合格）。
+- 非 Jager 模板（jagent/boss/mao 等）≥60%：fastprogress 跑 `autoaudit.py --priority --report`，结论只写 fairmint/audit_report.json，给 60% 提醒简报用；不进 audit_ok、不自动打满（autofill 本就不支持）。
+- verify_source：Sourcify 无记录 + OKLink 读失败 → verified=null（不缓存，下轮重查），不再当「未验证」；代理槽读失败 → null。
+- riskcheck：限流/节点错误不再当 revert；貔貅只认明确 revert，读失败写 read_errors / honeypot_unknown。
+- precheck 输出新状态 unknown（RPC 读失败，下轮重查）；hotfree 输出 verify_pending（验证查询失败的跨出 90 分钟窗口仍继续查，最多 6 小时）、wallets_unknown；opencheck 输出 price_unknown / balance_unknown（价格改 DexScreener/Gecko 批量）；possell 输出 unknown（价格/BNB 报价/貔貅模拟读失败，hp 不再因读失败永久记 fail）；fast_sell 报价读失败重试 3 次，标 quote_unknown，possell 不计入放弃次数、60 秒后重试。
+- 回测工具（只读）：`python3 backtest/collect.py && python3 backtest/evaluate.py`，结果 backtest/evaluated.json、backtest/report.md。
+- 2026-11-02 14:33 用户要求（只改显示，不改规则）：「未验证热门免费盘（破例铸提示）」每行写铸造进度「进度 已铸/总量（%）｜近 30 分钟 +N 次铸造」，由 hotprogress.py 读（totalMinted/totalSupply/nextTokenId…、MAX_SUPPLY/maxSupply/cap/GEN_TOTAL…，先合约本身再 token()/animals() 等子合约；都没有就按签名库函数名找 *Sold/*Minted 求和 + 总量类函数，如 CatMouse = gen0Sold+gen1Sold / GEN_TOTAL，另附 POOL_TRIGGER 开池门槛；ERC20 按 decimals 换算）。读不到写「进度读不到（原因）」，不得省略。hotfree.json 的 lines 已含进度，原样贴；alerts[].progress 有结构化字段。

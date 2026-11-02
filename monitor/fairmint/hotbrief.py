@@ -29,12 +29,16 @@ def brief(c):
     L_.append(f"单价 {R.price_u(v, bu)}｜进度 {pct if pct is not None else '?'}%（{minted if minted is not None else '?'}/{oa or '?'}）｜速度 {row.get('rate_pct_per_min', '?')}%/分钟")
     L_.append(f"预计到 70%：{row.get('eta_70_min') if row.get('eta_70_min') is not None else '已过或无法估算'} 分钟｜预计开池：{row.get('eta_open_min') if row.get('eta_open_min') is not None else '无法估算'} 分钟")
     try:
-        import minters as MN; m = MN.ai_minters(c, budget=25)
-    except Exception as e: m = None
-    if m: L_.append(f"Agent ID 铸造钱包 ≈{m['ai_minters']}（铸造地址 {m['minters']}，.ai 比例 {m['ai_ratio']}）｜单地址最高占铸造 {round(m['top_share']*100,1) if m.get('top_share') is not None else '?'}%")
-    else: L_.append("Agent ID 铸造钱包：读取失败（autofill 当作不达标）")
+        import minters as MN; m = MN.ai_minters_retry(c, budget=25, tries=2)
+    except Exception as e: m = {'status': 'unknown', 'reason': str(e)[:80]}
+    if m.get('status') == 'ok': L_.append(f"Agent ID 铸造钱包 ≈{m['ai_minters']}（铸造地址 {m['minters']}，.ai 比例 {m['ai_ratio']}）｜单地址最高占铸造 {round(m['top_share']*100,1) if m.get('top_share') is not None else '?'}%")
+    else: L_.append(f"Agent ID 铸造钱包：读取失败（unknown，autofill 本轮不买、60 秒内重读；{m.get('reason', '')[:60]}）")
     if aok: L_.append(f"审计：{'通过' if aok.get('ok') else '不通过'}（{'自动' if aok.get('auto') else '人工'}，{aok.get('time', '')}）— {aok.get('note', '')}")
-    else: L_.append("审计：未审计（≥60% 时做完整审计）")
+    else:
+        _pd = load(os.path.join(D, 'audit_pending.json'), {}).get(c); _rp = load(os.path.join(D, 'audit_report.json'), {}).get(c)
+        if _pd: L_.append(f"审计：未完成（读取失败，不算不通过，60 秒内自动重审）— {_pd.get('note', '')}")
+        elif _rp: L_.append(f"通用审计（非 Jager，不自动打满）：{_rp.get('status')}（{_rp.get('time', '')}）— {_rp.get('note', '')}")
+        else: L_.append("审计：未审计（≥60% 时做完整审计）")
     tags = []
     if v.get('template') not in (None, 'jager'): tags.append(f"{v.get('template')} 模板，≥70% 只提醒不自动打满")
     if v.get('has_refund'): tags.append('有退款函数')

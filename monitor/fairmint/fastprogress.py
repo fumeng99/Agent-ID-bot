@@ -77,6 +77,13 @@ def read_once(tg):
         calls += [('eth_call', [{'to': a, 'data': '0x' + CU.sel(m)}, 'latest']), ('eth_call', [{'to': a, 'data': '0x' + CU.sel(o)}, 'latest'])]
     try: R = batch(calls, tolerant=True, timeout=RPC_TIMEOUT, deadline=time.time() + RPC_BUDGET, parallel=4) if calls else []
     except Exception as e: return None, str(e)[:160]
+    # 2026-11-02：单项读空（None：限流/节点错误；Jager 类核心字段不会 revert）的盘换节点再读一次，仍失败才计 read_failed（unknown，下一轮再读）
+    miss = [j for j in range(len(tg)) if R[2 * j] is None]
+    if miss and time.time() - T0 < FP_DEADLINE - 8:
+        try:
+            R2 = batch([calls[2 * j] for j in miss] + [calls[2 * j + 1] for j in miss], tolerant=True, timeout=RPC_TIMEOUT, deadline=time.time() + 6, parallel=2)
+            for k, j in enumerate(miss): R[2 * j], R[2 * j + 1] = R2[k], R2[len(miss) + k]
+        except Exception: pass
     res = {}
     for j, (a, tpl, oa, nm) in enumerate(tg):
         m, o = R[2 * j], R[2 * j + 1]
@@ -86,8 +93,31 @@ def read_once(tg):
     return res, None
 
 
+def launch_audit(a, s, pct, report=False):
+    """后台只读审计。≥60% 带 --priority（重试 5 次、独立 RPC 冷却表 = 单独限流预算）。"""
+    import subprocess
+    s['audit_at'] = time.time(); flags = (' --priority' if pct >= 60 else '') + (' --report' if report else '')
+    subprocess.Popen(['bash', '-c', f'cd {D} && RPCPOOL_COOL=/tmp/rpcpool_cool_audit{"_prio" if pct >= 60 else ""}.json timeout 170 python3 autoaudit.py{flags} {a} >> {L}/discover_out/autoaudit.log 2>&1'],
+                     start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def launch_autofill(a, row, found, out):
+    import subprocess
+    # 2026-11-01 安小将教训：先 fairmint.py 全量刷新要 ~110 秒，17%/分钟的盘 70→100% 不到 2 分钟就开池。
+    # 改为把本次实测进度直接写进 discover_out/fairmint.json 的 watch_unopened，立刻跑 autofill（闸门不变），fairmint 刷新放到后面
+    try:
+        fp = f'{L}/discover_out/fairmint.json'; fm = load(fp, {}); wl = fm.setdefault('watch_unopened', [])
+        base_row = dict(found.get(a) or {}); base_row.update(row); base_row['contract'] = a; base_row['open_pct'] = row['open_pct']
+        wl[:] = [x for x in wl if x.get('contract', '').lower() != a] + [base_row]
+        json.dump(fm, open(fp + '.tmp', 'w'), ensure_ascii=False); os.replace(fp + '.tmp', fp)
+    except Exception as e: out.setdefault('fastfill_err', []).append(str(e)[:120])
+    subprocess.Popen(['bash', '-c', f'cd {L} && timeout 900 python3 autofill.py > discover_out/autofill_fast.json 2>&1; timeout 110 python3 fairmint/fairmint.py --minutes 10 > discover_out/fairmint.fast.json 2>/dev/null && mv discover_out/fairmint.fast.json discover_out/fairmint.json'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def step(found, st, aok):
     now = time.time(); tg = targets(found)
+    pend = load(os.path.join(D, 'audit_pending.json'), {}); rep = load(os.path.join(D, 'audit_report.json'), {})
+    recheck = load(os.path.join(L, 'discover_out', 'autofill_recheck.json'), {})
     res, err = read_once(tg)
     out = {'time_cst': time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(now + 8 * 3600)), 'checked': len(tg), 'read_failed': 0,
            'crossings': [], 'hot': [], 'pre_audit': [], 'urgent': False}
@@ -95,7 +125,7 @@ def step(found, st, aok):
         out.update({'read_failed': len(tg), 'error': '所有 RPC 节点失败：' + err}); return out
     for a, tpl, oa, nm in tg:
         minted, opened = res[a]
-        if minted is None: out['read_failed'] += 1; continue
+        if minted is None: out['read_failed'] += 1; out.setdefault('read_failed_list', []).append(nm); continue
         pct = round(min(minted * 100 / oa, 999), 2)
         s = st.setdefault(a, {'hist': [], 'alerted': []})
         hist = s['hist']; prev = hist[-1] if hist else None
@@ -124,7 +154,7 @@ def step(found, st, aok):
         if pct >= MIN or (row['eta_70_min'] is not None and row['eta_70_min'] <= 30):
             if pct >= 50 and (DAEMON or time.time() - T0 < FP_DEADLINE - 12):  # B1 预热（单次模式剩余时间不够就不扫，避免超时）：提前把 Agent ID 铸造钱包数算进缓存，70% 时 autofill 不用临时扫
                 try:
-                    import minters as _MN; row['ai_minters'] = (_MN.ai_minters(a, budget=8) or {}).get('ai_minters')
+                    import minters as _MN; _r = _MN.ai_minters(a, budget=8) or {}; row['ai_minters'] = _r.get('ai_minters') if _r.get('status') == 'ok' else 'unknown'
                 except Exception: pass
             out['hot'].append(row)
             if a not in aok: out['pre_audit'].append({'contract': a, 'name': nm, 'open_pct': pct, 'bscscan': row['bscscan']})
@@ -136,30 +166,29 @@ def step(found, st, aok):
         # 2026-11-01 安小将教训：Jager 模板盘一有热度（≥10% 或 ≥2%/分钟 或 预计 30 分钟内到 70%）且没有审计结论 → 后台立刻跑只读自动审计 autoaudit.py，
         # 不等 Agent；结论写 audit_ok.json（auto:true），70% 快速通道直接可用。人工结论优先，不覆盖。
         if a not in aok and tpl == 'jager' and 'auto_audit' not in s['alerted'] and (pct >= 10 or (rate or 0) >= 2 or (row['eta_70_min'] or 999) <= 30):
-            s['alerted'].append('auto_audit'); out.setdefault('auto_audit_started', []).append(a)
-            import subprocess
-            subprocess.Popen(['bash', '-c', f'cd {D} && timeout 150 python3 autoaudit.py {a} >> {L}/discover_out/autoaudit.log 2>&1'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            s['alerted'].append('auto_audit'); out.setdefault('auto_audit_started', []).append(a); launch_audit(a, s, pct)
+        # 2026-11-02「审计读失败不缓存、1 分钟内重审」：已发起过自动审计但仍没有结论（读失败写进 audit_pending.json，或进程超时没写任何结论），
+        # 距上次发起 ≥60 秒就重审；≥60% 的盘带 --priority（重试更多、独立 RPC 冷却表）。
+        elif a not in aok and tpl == 'jager' and 'auto_audit' in s['alerted'] and time.time() - s.get('audit_at', 0) >= 60 \
+                and (a in pend or time.time() - s.get('audit_at', 0) >= 170) and (pct >= 30 or (rate or 0) >= 2 or (row['eta_70_min'] or 999) <= 30):
+            out.setdefault('auto_audit_started', []).append(a); out.setdefault('audit_retry', []).append(a); launch_audit(a, s, pct)
+        # 非 Jager 模板（jagent 等，autofill 不支持）≥60%：跑通用审计出报告（audit_report.json），读失败同样 60 秒后重审；不写 audit_ok、不触发买入
+        if tpl not in ('jager', None) and pct >= 60 and pct <= 100 and time.time() - s.get('audit_at', 0) >= 60 \
+                and (rep.get(a) is None or (rep[a].get('status') == 'unknown')) and s.get('report_n', 0) < 30:
+            s['report_n'] = s.get('report_n', 0) + 1; out.setdefault('report_audit_started', []).append(a); launch_audit(a, s, pct, report=True)
         # 2026-11-01 19:27 BNBHolder：自动审计因「源码未验证」不通过的热盘，开池前每 2 分钟重跑一次只读审计（项目方常在开铸后才验证源码）；人工结论不动
         _ao = aok.get(a) or {}
         if _ao.get('auto') and not _ao.get('ok') and '未验证' in str(_ao.get('note', '')) and tpl == 'jager' and pct < 100 and time.time() - s.get('reaudit_at', 0) >= 120:
-            s['reaudit_at'] = time.time(); out.setdefault('auto_audit_started', []).append(a)
-            import subprocess
-            subprocess.Popen(['bash', '-c', f'cd {D} && timeout 150 python3 autoaudit.py {a} >> {L}/discover_out/autoaudit.log 2>&1'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            s['reaudit_at'] = time.time(); out.setdefault('auto_audit_started', []).append(a); launch_audit(a, s, pct)
+        # 2026-11-02：autofill 因读失败（unknown）没买的盘 → 45–60 秒后重跑 autofill（全部闸门照旧、文件锁 + filled 防重复）
+        rc = recheck.get(a)
+        if rc and pct >= 70 and (aok.get(a) or {}).get('ok') and time.time() - rc.get('at', 0) >= 45 and time.time() - s.get('refill_at', 0) >= 60 and '--no-fastfill' not in argv:
+            s['refill_at'] = time.time(); out.setdefault('autofill_recheck_started', []).append(a); launch_autofill(a, row, found, out)
         # 2026-11-01 安小将教训：已审计通过、还没到 70% 的热盘 = armed，主循环不因 urgent 退出，继续 5 秒盯到 70% 触发快速通道
         if pct < 70 and (aok.get(a) or {}).get('ok') and 'fastfill' not in s['alerted'] and (pct >= 30 or (rate or 0) >= 3):
             out.setdefault('armed', []).append(a)
         if pct >= 70 and (aok.get(a) or {}).get('ok') and 'fastfill' not in s['alerted'] and '--no-fastfill' not in argv:
-            s['alerted'].append('fastfill'); out.setdefault('fastfill_started', []).append(a)
-            import subprocess
-            # 2026-11-01 安小将教训：先 fairmint.py 全量刷新要 ~110 秒，17%/分钟的盘 70→100% 不到 2 分钟就开池。
-            # 改为把本次实测进度直接写进 discover_out/fairmint.json 的 watch_unopened，立刻跑 autofill（闸门不变），fairmint 刷新放到后面
-            try:
-                fp = f'{L}/discover_out/fairmint.json'; fm = load(fp, {}); wl = fm.setdefault('watch_unopened', [])
-                base_row = dict(found.get(a) or {}); base_row.update(row); base_row['contract'] = a; base_row['open_pct'] = pct
-                wl[:] = [x for x in wl if x.get('contract', '').lower() != a] + [base_row]
-                json.dump(fm, open(fp + '.tmp', 'w'), ensure_ascii=False); os.replace(fp + '.tmp', fp)
-            except Exception as e: out.setdefault('fastfill_err', []).append(str(e)[:120])
-            subprocess.Popen(['bash', '-c', f'cd {L} && timeout 900 python3 autofill.py > discover_out/autofill_fast.json 2>&1; timeout 110 python3 fairmint/fairmint.py --minutes 10 > discover_out/fairmint.fast.json 2>/dev/null && mv discover_out/fairmint.fast.json discover_out/fairmint.json'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            s['alerted'].append('fastfill'); out.setdefault('fastfill_started', []).append(a); launch_autofill(a, row, found, out)
     out['hot'].sort(key=lambda r: -r['open_pct'])
     return out
 
@@ -190,7 +219,7 @@ def main():
             out['hot_alert'] = out.get('hot_alert', []) + o.get('hot_alert', [])
         json.dump(st, open(ST + '.tmp', 'w')); os.replace(ST + '.tmp', ST)
         if DAEMON:
-            ev = {k: o[k] for k in ('crossings', 'hot_alert', 'early_audit', 'fastfill_started', 'auto_audit_started', 'fastfill_err') if o.get(k)}
+            ev = {k: o[k] for k in ('crossings', 'hot_alert', 'early_audit', 'fastfill_started', 'auto_audit_started', 'audit_retry', 'report_audit_started', 'autofill_recheck_started', 'fastfill_err') if o.get(k)}
             if ev:
                 ev['time_cst'] = o['time_cst']; ev['hot'] = o['hot'][:5]
                 with open(f'{L}/discover_out/fp_events.jsonl', 'a') as fe: fe.write(json.dumps(ev, ensure_ascii=False) + '\n')
