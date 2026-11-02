@@ -548,3 +548,15 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 
 ## 【覆盖·2026-11-03 02:39 用户「合成一条规则」】所有自动付费统一一条
 - 普通付费和 fair mint 60% 打满合成一条：每号每个项目 ≤30U（含 gas），每号每天合计 ≤100U，全天，无单笔上限。fair mint 仍在进度 ≥60% 且其额外闸门（钱包 ≥100、国库 ≤30%、储备 ≥65%/退款、未开池）通过时才买，但每号最多买到 30U（autofill.py 按单价算份数，最多 10 份）。安全闸门不变。
+
+## 新模板自动识别（newtpl.py，2026-11-03）
+- 起因：AGC（押金全退挖矿，0x6288dfe86f22b53eeb6886ae2d78941de7483743）因模板不认识被漏掉。newtpl.py 只读（绝不签名、不发交易），discoverd 约每 120 秒拉起（flock -n /tmp/newtpl.lock，timeout 170），日志 discover_out/newtpl.log。
+- 候选：fairmint/found.json 中 template 为 None/'other' 的合约 + chainscan/candidates.json（contract/mint_target）+ salearm_plan.json + discover_out/hotfree.json alerts；已知模板（jager/jagent/boss/mao）排除。
+- 热度门槛：近 30 分钟（4000 块）合约日志对应交易的 from ≥30 个不同地址（48.club 节点多地址 getLogs，交易 from 走 rpcpool）。日志读不到 → 本轮该组跳过，不记冷；冷合约 15 分钟后再看。
+- 只分析源码已验证（verify_source.py，含字节码指纹放行；bytecode-match 取被匹配合约源码）且非代理或代理实现已验证的合约。未验证 30 分钟后重查；已分析 6 小时内不重复。每轮最多分析 4 个（按热度排序）。
+- 提取特征：payable 入口和单价/msg.value 校验、每地址/每日上限、押金退还（payable 里 X += msg.value，退款函数里 X -= v 且转出同一个 v、无 fee/tax 扣减 → 退款=押金）、合约余额 ≥ 应退押金、BNB 去向（转给 owner/treasury/payee 的比例）、加 LP 及 LP 去向（黑洞/合约内）、特权函数能否提 BNB/LP/rescue/sweep、开池条件、mint 出的代币及增发权限（riskcheck.py；minter=本合约视为规则内）、税、暂停权限（暂停是否卡住退款）、可升级（codeutil.upgradeable）、邀请参数（ref/referrer/inviter…）、领取函数、源码里的官网链接。
+- 归类：refund_deposit（押金全退型）> fair_launch（募资+加 LP+开池条件）> paid_mint（BNB 或 ERC20 付费铸造）> free_mint > unknown。
+- 结论：reject = 特权可提走资金 / 可升级 / 代币可被 owner 增发 / 税>10% / LP 打给非黑洞 / 合约余额 < 应退押金 / 退款≠押金 / 暂停卡住退款 / 项目方抽成 >30%；review = 其余有风险项、类别 unknown、或读不出单价/抽成比例；pass = 已知类别且无风险项。
+- 输出：discover_out/newtpl.json（每合约 name、合约、类别、关键参数、热度、safe_flags、risk_flags、结论、邀请参数、官网）、discover_out/newtpl_events.jsonl（只写新识别或类别/结论变化的），状态 newtpl_state.json。手动：`python3 newtpl.py --test 0x…`（不写状态）。
+- 交易边界：只有 refund_deposit + pass + refundmine 闸门（已验证、非代理、合约余额 ≥ 应退押金）的合约进 newtpl.json 的 refundmine_candidates；refundmine.py 读它并入候选，但仍要求 AGC 接口选择器齐全并每次重查全部闸门（押金 ≤0.02 BNB/号/天、留 0.003 BNB、preview 干净）。接口不同的押金全退盘只出分析，不挖。其他类别一律不做任何交易，只出分析，付费仍按原有付费规则（简报 → 用户确认 / 自动付费闸门）。
+- 回归：AGC → refund_deposit / pass / refundmine_ok=true；币安无忧（jager，0xb63e…7697）→ fair_launch / review（国库比例在源码里是运算得出，读不出；jager 仍走原 autoaudit）；HalloweenAgents 0x0962…6054、MothAgent 0x872d…5491 → paid_mint / reject（owner withdraw）；AgentMint FLY4 0x4444…af69 → paid_mint / review（ERC20 付款进 treasury）。
