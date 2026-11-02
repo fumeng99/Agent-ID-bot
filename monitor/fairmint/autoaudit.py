@@ -95,6 +95,23 @@ def upgradeable(a):
     return r
 
 
+def src_treasury_bps(a):
+    """2026-11-03 用户指出 Burn Agent 有比例只是没 TREASURY_BPS() getter：从已验证源码读进池比例（如 lp = price * 70 / 100），国库 = 其余。
+    返回 (bps 或 None, 说明)。读不到/多个不同比例 → None（照旧不合格或未知）。"""
+    import re
+    try:
+        d = json.loads(urllib.request.urlopen(f'https://sourcify.dev/server/v2/contract/56/{a}?fields=sources', timeout=25).read())
+    except Exception as ex: return None, f'源码拉取失败 {str(ex)[:40]}'
+    pcts = set()
+    for k, v in (d.get('sources') or {}).items():
+        if '@openzeppelin' in k or '/utils/' in k: continue
+        for m_ in re.finditer(r'\b(?:lp|liq\w*|toPool|poolAmt|reserve\w*)\s*=\s*[^;]*?\*\s*(\d+)\s*/\s*(100|1000|10000|10_000)\b', v['content'], re.I):
+            pcts.add(int(m_.group(1)) * 10000 // int(m_.group(2).replace('_', '')))
+    if len(pcts) == 1:
+        lp = pcts.pop(); return 10000 - lp, f'源码进池 {lp/100:.0f}%'
+    return None, f'源码比例 {sorted(pcts)}' if pcts else '源码未找到进池比例'
+
+
 def audit(m):
     m = m.lower(); f = (load(FOUND, {}).get(m) or {}); bad, unk = [], []; minter_ok = False
     tpl = f.get('template')
@@ -104,7 +121,10 @@ def audit(m):
         st, r = strict(m, 'token()')
         if st == 'ok' and r and len(r) >= 66 and int(r, 16): tok = '0x' + r[-40:]
         elif st == 'unknown': unk.append(f'代币地址读取失败（{r[:60]}）')
-        else: bad.append('合约没有 token()，读不到代币地址')
+        else:
+            st2, r2 = strict(m, 'totalSupply()')
+            if st2 == 'ok' and r2 and len(r2) >= 66: tok = m  # mint 合约本身就是代币（如 Burn Agent）
+            else: bad.append('合约没有 token()，读不到代币地址')
     for a, nm in ((m, 'mint'), (tok, '代币')):
         if not a: continue
         v = verified(a)
@@ -119,14 +139,19 @@ def audit(m):
             st, r = strict(m, 'TREASURY_BPS()')
             if st == 'ok' and r and len(r) >= 66: tb = int(r[:66], 16)
             elif st == 'unknown': unk.append(f'国库抽成 TREASURY_BPS() 读取失败（{r[:60]}）')
-            elif tpl == 'jager': bad.append('合约没有 TREASURY_BPS()，无法确认国库抽成 ≤30%')
+            else:
+                tb, why = src_treasury_bps(m)
+                if tb is None and tpl == 'jager': bad.append(f'合约没有 TREASURY_BPS()，{why}，无法确认国库抽成 ≤30%')
         if tb is not None and tb > 3000: bad.append(f'国库抽成 {tb} bps 超过 30%')
+    if tok and tok == m:
+        minter_ok = True  # 代币就是 mint 合约本身，增发只在本合约内（源码已验证、不可升级另查）
     if tok:
-        st, r = strict(tok, 'minter()')
+        st, r = strict(tok, 'minter()') if tok != m else ('skip', '')
         if st == 'ok' and r and len(r) >= 66:
             mn = '0x' + r[-40:]
             if mn.lower() != m: bad.append(f'代币 minter {mn[:8]}… 不是 mint 合约')
             else: minter_ok = True
+        elif st == 'skip': pass
         elif st == 'unknown': unk.append(f'代币 minter() 读取失败（{r[:60]}）')
         else:
             if tpl == 'jager': bad.append('代币没有 minter()，无法确认增发权只在 mint 合约')
