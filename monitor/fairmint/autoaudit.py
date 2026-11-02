@@ -19,7 +19,7 @@
   - 国库抽成：found.json 没有就链上直接读 TREASURY_BPS()；节点失败=unknown；函数不存在（revert）=无法确认抽成=不合格（规则不放宽）。
   - 审计用独立的 RPC 冷却表（RPCPOOL_COOL=/tmp/rpcpool_cool_audit.json），不被巡逻其它步骤拉黑的节点拖累（单独限流预算）。
 非 Jager 模板（如 jagent 的 BNBbaby）：用 --report 跑同样的通用检查，结论只写 fairmint/audit_report.json（供 60% 提醒简报），
-  不写 audit_ok.json（autofill 本就不支持这些模板，不会因此自动买）。
+  不写 audit_ok.json。2026-11-03 03:21 统一规则起：audit_report pass = 非 Jager 模板的审计闸门，autofill 在 ≥60% 时据此（加其余全部闸门）自动买。
 用法：python3 autoaudit.py [--priority] [--report] <mint合约> [<mint合约>...]
 """
 import json, os, subprocess, sys, time, uuid, urllib.request, fcntl

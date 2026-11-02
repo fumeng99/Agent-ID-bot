@@ -9,7 +9,8 @@ if ! flock -n 9; then echo "discover_all 已有一份在跑：等它跑完（≤
 D=$AIDBOT_DATA; O=$D/discover_out; mkdir -p "$O"; find "$O" -maxdepth 1 -type f \( -name '*.json' -o -name '*.err' -o -name summary.txt \) ! -name fail_streak.json ! -name fp_live.json ! -name possell_live.json ! -name possell_daemon_out.json ! -name possell_reported.json ! -name autofill_fast.json ! -name notify_last_sent.json -delete  # 2026-11-01 20:50：常驻进程的心跳/未汇报卖出结果和失败计数不再每轮删掉
 run() { # name timeout dir cmd...
   local n=$1 t=$2 dir=$3; shift 3
-  ( s=$(date +%s); cd "$dir" && timeout "$t" "$@" > "$O/$n.json" 2> "$O/$n.err"; rc=$?
+  # 2026-11-03：先写 .run 临时文件再原子替换（原来 > 直接截断，fairmint.json 每轮约 110 秒是空文件，autofill 这时读到空 = 漏掉 ≥60% 的盘）；输出为空则保留上一轮
+  ( s=$(date +%s); cd "$dir" && timeout "$t" "$@" > "$O/$n.json.run" 2> "$O/$n.err"; rc=$?; if [ -s "$O/$n.json.run" ]; then mv -f "$O/$n.json.run" "$O/$n.json"; else rm -f "$O/$n.json.run"; fi
     echo "$n exit=$rc ${t}s上限 用时=$(( $(date +%s)-s ))s" >> "$O/summary.txt" ) &
 }
 run chainscan 200 $D/chainscan env SCAN_BUDGET=60 python3 scan.py

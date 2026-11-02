@@ -2,6 +2,12 @@
 
 > 这是驱动巡逻的定时任务原文。给其他机器人用时：建一个每 10 分钟触发的定时任务，把下面整段作为提示词；路径按你的 AIDBOT_HOME / AIDBOT_DATA 替换；「scheduled_task / web_search」换成你平台的定时任务和搜索工具。授权条款要换成你自己用户的原话授权。
 
+【覆盖·2026-11-03 03:21 用户原话「是都要等60%才对 全部改统一规则 适配全部项目」——付费自动买唯一规则，与下文 D/6b/6c 及任何旧条款冲突时以此为准】
+- 任何付费项目（jager/AGI 克隆、jagent、boss、mao、burnmix、boltbook、newtpl 识别的新模板…）：销售/开池进度 ≥60%（合约读数）且安全闸门全过 → 全天自动买；不限单笔；每号每项目累计 ≤30U（含 gas，跨天累计）；每号每天所有自动付费合计 ≤100U。
+- 唯一入口：`python3 $AIDBOT_DATA/autofill.py`（fastprogress 常驻 / newtpl 每轮 / 巡逻第 6d 步触发；按模板分派 fair_buy / bnb_fair_buy / burnmix_buy / generic_buy）。巡逻 Agent 不再手工按 6b/6c 下任何付费单。
+- 读不出进度（无上限/无开池份数、已开池的二级市场买入）→ 不自动买，只出简报等「确认买入 XX 金额 + 账号」。普通付费「过闸即买」路径作废；D 里「白天绝不自动买」、6b 夜间、6c「每项目每号 1 份 / 单笔 ≤5U / 合计 30U」全部作废。
+- 额度以 `python3 quota.py` 为准（daily_used_u / per_project_used_u）。
+
 【最高优先级·用户安全规则（2026-10-31 03:22 用户原文要求，与下文或 RULES.md 冲突时以此为准）】
 A. 免费 Mint 全自动：只自动铸造价格严格为 0、只耗 gas、无授权的项目（签名只限规则 C 的 EIP-712）。每个账号每笔都先 baw contract-call preview，干净（simulationCode 000000000、risks 全空、无 allowance/authority 变化、无代币/BNB 转出、只得 NFT/代币）才 execute；任何风险立即放弃并在消息里提醒用户。
 B. 源码必须公开：合约须在 Sourcify 或 BscScan 已验证源码（代理合约要查实现合约）；未公开源码，或项目方能直接提走用户资金的，直接跳过并在消息里告知用户（项目名、合约、原因）。「仅链上发现」的项目同样要过这一条。
@@ -50,7 +56,7 @@ RPC 限流：余额或链上查询遇到 429/5xx 时换节点重试（bsc-datase
 5c. 解题/签名/面试/白名单型（如 SOLVD、Agent Shift）：不许直接跳过。读官网 agent-guide.md/skill.md/llms.txt/JS 和接口，走 challenge → 解题 → submit → 拿项目方签给本地址的 mint 授权 → mint；登录/激活只按规则 C 签 EIP-712。最终 mint 仍须 value=0 且 preview 干净。做不了（验证码、X/Discord 任务、人工审核、签名类型不明）必须单独写一段：项目名、官网、卡在哪步、剩余份数/截止 CST，记 skip_alerted:true。可复用脚本存 $AIDBOT_DATA/challenge/。
 5d. 可领取奖励（2026-10-31 18:26 用户原话「其他需要领取的也要自动领取」）：每轮跑 `python3 $AIDBOT_DATA/claimscan.py`，对每个候选按 RULES.md「可领取奖励自动领取」用 mint_many.py 逐号 preview→干净才 execute→核对；只领奖励不动本金、不卖不转不授权。领到的写进消息（项目、账号、tx、到账状态）。
 6. 付费项目：09:00–24:00 只投研不扣款，简报按规则 D（query-token-audit + query-token-info：风险点、池子、持仓集中度）。新发现写简报（亮点、链上数据、安全评级、单价与下一档价（U）、进度、开池条件、参与条件）。进度首次 ≥60% 单独提醒一次（记 progress60_alerted:true），结尾「需要买请回复：确认买入 XX 金额 + 账号」。 付费简报必须按 RULES.md「付费简报格式」写全（链接、机制、链上数据、权限风险、估值、结论），不许一行带过。付费 fair mint 合约先查有没有免费份入口（FREE_SHARES/claimFree/freeMint 等），有就按 0 元规则先给各号领——但免费入口所在合约同样必须先过规则 B 源码验证，未验证一律不领（2026-11-01 币安狗狗 claimFree 违规事故）。
-6b. 夜间自动付费（仅 00:00–09:00 CST，2026-10-31 03:26 用户恢复）：严格按 RULES.md「夜间自动付费进场与止盈止损」和规则 D 例外执行。先读 $AIDBOT_DATA/auto_buy.json 当日已用额度；单笔 ≤5U、所有账号合计每天 ≤30U（含 gas）；源码已验证、query-token-audit/query-token-info/riskcheck 无高危、非貔貅、买卖税 ≤10% 才买，一项不确定就不买只写简报；已开池且开池后大跌的不买；执行前重读价格，变动 >10% 重新 preview；只做精确额度 approve 且成交后归零；买后立刻写账本和 positions（项目、合约、账号、买入价、数量、时间、tx）。positions 止盈止损：2 倍卖一半、跌破买入价 50% 全卖、开池后从高点回撤 50% 全卖（baw market-order，slippage auto，失败 15% 重试一次）。09:00–24:00 触发时不自动卖，只提醒「需要卖请回复：确认卖出 + 项目 + 账号」。
-6c. 付费分档 fair mint 全天自动买（任何时段，2026-10-31 15:19 用户授权「白天也自动 改全天自动吧」）：严格按 RULES.md「付费分档 fair mint 全天自动买」。只限 fairmint.py 发现的 Jager/AGI 克隆合约，未开池才买；每项目每号 1 份，单笔 ≤5U；与 6b 共用所有账号每天合计 ≤30U（auto_buy.json）；源码已验证、无高危、项目方未满时不能提走资金才买；每号单独 preview，买后 confirm.py 核对，写 auto_buy.json 和 positions。卖出仍只夜间自动。
+6b. 【已作废·2026-11-03 03:21，统一走 autofill.py】夜间自动付费（仅 00:00–09:00 CST，2026-10-31 03:26 用户恢复）：严格按 RULES.md「夜间自动付费进场与止盈止损」和规则 D 例外执行。先读 $AIDBOT_DATA/auto_buy.json 当日已用额度；单笔 ≤5U、所有账号合计每天 ≤30U（含 gas）；源码已验证、query-token-audit/query-token-info/riskcheck 无高危、非貔貅、买卖税 ≤10% 才买，一项不确定就不买只写简报；已开池且开池后大跌的不买；执行前重读价格，变动 >10% 重新 preview；只做精确额度 approve 且成交后归零；买后立刻写账本和 positions（项目、合约、账号、买入价、数量、时间、tx）。positions 止盈止损：2 倍卖一半、跌破买入价 50% 全卖、开池后从高点回撤 50% 全卖（baw market-order，slippage auto，失败 15% 重试一次）。09:00–24:00 触发时不自动卖，只提醒「需要卖请回复：确认卖出 + 项目 + 账号」。
+6c. 【已作废·2026-11-03 03:21，统一走 autofill.py】付费分档 fair mint 全天自动买（任何时段，2026-10-31 15:19 用户授权「白天也自动 改全天自动吧」）：严格按 RULES.md「付费分档 fair mint 全天自动买」。只限 fairmint.py 发现的 Jager/AGI 克隆合约，未开池才买；每项目每号 1 份，单笔 ≤5U；与 6b 共用所有账号每天合计 ≤30U（auto_buy.json）；源码已验证、无高危、项目方未满时不能提走资金才买；每号单独 preview，买后 confirm.py 核对，写 auto_buy.json 和 positions。卖出仍只夜间自动。
 7. 写 seen.json（顶层 list）、latest.json。本轮若改了 RULES.md 或脚本，运行 `bash $AIDBOT_DATA/sync_github.sh "<改了什么>"`（shell 带 credentials [{"provider":"github"}]）。
 8. 每轮发一条中文简短消息，以【巡逻 HH:MM】开头：账号在线、补 gas、新项目数、铸造了什么（项目、账号、tx 链接）、付费分档简报、定时抢铸任务、夜间买卖（项目、账号、金额 U、tx、当日已用/30U）、卡住项单独说明、源码未公开而跳过的项目、跳过原因、60% 提醒。没有新东西就一句话。

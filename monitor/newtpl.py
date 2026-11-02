@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """新模板自动识别（用户 2026-11-03 02:4x 要求，起因：AGC 押金全退挖矿 0x6288…3743 因模板不认识被漏掉）。
 【只读】本脚本绝不签名、不发交易，只读链上 + 源码，输出分析。
+2026-11-03 03:21 统一付费自动买：analyze 额外提取 params.progress（已售/上限/开池，读不出上限=无）和 params.treasury_bps；
+每轮重读已识别合约进度，≥60% 且 pass 的付费类只「拉起 autofill.py」（买不买由 autofill 全部闸门决定，本脚本仍不签名不交易）。
 
 discoverd 每约 120 秒拉起（flock -n /tmp/newtpl.lock）。流程：
 1. 候选：fairmint/found.json 里 template 为 None/'other' 的合约 + chainscan/candidates.json（contract/mint_target）
@@ -242,6 +244,64 @@ def token_check(token, minter):
     return safe, risk, info
 
 
+# ---------------- 进度 / 国库（2026-11-03 03:21 统一付费自动买：newtpl 识别的模板也按 ≥60% 进度走 autofill） ----------------
+SOLD_KEYS = ('sharesMinted', 'totalMinted', 'totalPaidShares', 'totalSold', 'soldShares', 'sold', 'minted', 'totalShares')
+CAP_KEYS = ('MAX_SHARES', 'MAX_MINTS', 'LIQUIDITY_TARGET_SHARES', 'OPEN_AT', 'OPEN_UNITS', 'TOTAL_SHARES', 'maxShares', 'MAX_SUPPLY_SHARES', 'cap', 'CAP')
+OPEN_KEYS = ('poolOpen', 'opened', 'finalized', 'liquidityTargetReached', 'launched', 'tradingOpen', 'soldOut')
+
+
+def extract_progress(views):
+    """从无参 view 读数取 已售/上限/是否开池。读不出上限 → None（autofill 不自动买，只简报）。"""
+    sold_k = next((k for k in SOLD_KEYS if isinstance(views.get(k), int) and not isinstance(views.get(k), bool)), None)
+    cap_k = next((k for k in CAP_KEYS if isinstance(views.get(k), int) and not isinstance(views.get(k), bool) and views.get(k)), None)
+    if sold_k == 'totalShares' and cap_k is None: return None
+    if not sold_k or not cap_k: return None
+    sold, cap = views[sold_k], views[cap_k]
+    if cap > 10 ** 9: return None  # 像代币总量（wei），不是份数
+    op = next((bool(views[k]) for k in OPEN_KEYS if isinstance(views.get(k), bool)), None)
+    if views.get('mintingOpen') is False and op is None: op = True
+    return {'sold_fn': sold_k + '()', 'cap_fn': cap_k + '()', 'open_fn': next((k + '()' for k in OPEN_KEYS if isinstance(views.get(k), bool)), None),
+            'sold': sold, 'cap': cap, 'pct': round(min(sold * 100 / cap, 999), 2), 'opened': op, 'at': int(time.time())}
+
+
+def extract_treasury_bps(views, code):
+    """国库抽成 bps：TREASURY_BPS 类 view / 10000-LP_BPS / 源码常量 / 源码 lp = x * 70 / 100。读不出 → None。"""
+    for k, v in views.items():
+        if isinstance(v, int) and not isinstance(v, bool) and re.fullmatch(r'(TREASURY|TEAM|DEV|FEE)_?(BPS|RATE)', k, re.I) and v <= 10000: return v, k
+    for k, v in views.items():
+        if isinstance(v, int) and not isinstance(v, bool) and re.fullmatch(r'(LP|LIQ\w*|POOL)_?BPS', k, re.I) and v <= 10000: return 10000 - v, f'10000-{k}'
+    m = re.search(r'constant\s+(LP|LIQ\w*|POOL)_?BPS\s*=\s*([\d_]+)', code or '', re.I)
+    if m: return 10000 - int(m.group(2).replace('_', '')), f'10000-{m.group(1)}_BPS(常量)'
+    m = re.search(r'constant\s+(TREASURY|TEAM|DEV)_?BPS\s*=\s*([\d_]+)', code or '', re.I)
+    if m: return int(m.group(2).replace('_', '')), f'{m.group(1)}_BPS(常量)'
+    pcts = {int(x.group(1)) * 10000 // int(x.group(2).replace('_', '')) for x in re.finditer(r'\b(?:lp|liq\w*|toPool|poolAmt|reserve\w*)\s*=\s*[^;]*?\*\s*(\d+)\s*/\s*(100|1000|10000|10_000)\b', code or '', re.I)}
+    if len(pcts) == 1: return 10000 - pcts.pop(), '源码进池比例'
+    return None, None
+
+
+def refresh_progress(res):
+    """每轮便宜地重读 newtpl.json 里有进度字段的合约（已售/上限/开池），返回 [(合约, 行)]。"""
+    rows = [(a, r) for a, r in res.items() if (r.get('params') or {}).get('progress') and not r['params']['progress'].get('opened')]
+    if not rows: return []
+    calls = []
+    for a, r in rows:
+        pg = r['params']['progress']
+        calls += [('eth_call', [{'to': a, 'data': '0x' + sel(pg['sold_fn'])}, 'latest']), ('eth_call', [{'to': a, 'data': '0x' + sel(pg['cap_fn'])}, 'latest']),
+                  ('eth_call', [{'to': a, 'data': '0x' + sel(pg['open_fn'])}, 'latest']) if pg.get('open_fn') else ('eth_blockNumber', [])]
+    try: R = batch(calls, tolerant=True, chunk=30)
+    except Exception: return []
+    out = []
+    for j, (a, r) in enumerate(rows):
+        pg = r['params']['progress']; s_, c_, o_ = R[3 * j], R[3 * j + 1], R[3 * j + 2]
+        if not (isinstance(s_, str) and len(s_) >= 66 and isinstance(c_, str) and len(c_) >= 66): pg['stale'] = True; continue
+        sold, cap = int(s_[:66], 16), int(c_[:66], 16)
+        if not cap: continue
+        pg.update(sold=sold, cap=cap, pct=round(min(sold * 100 / cap, 999), 2), at=int(time.time()), stale=False)
+        if pg.get('open_fn') and isinstance(o_, str) and len(o_) >= 66: pg['opened'] = bool(int(o_[:66], 16))
+        out.append((a, r))
+    return out
+
+
 # ---------------- 分析 ----------------
 def analyze(a, vinfo):
     impl = vinfo.get('proxy_impl'); src_addr = impl or a
@@ -260,6 +320,10 @@ def analyze(a, vinfo):
     bal = int(rpc('eth_getBalance', [a, 'latest']), 16)
     safe, risk = [], []
     p = {'bnb_balance': bal / 1e18}
+    pg = extract_progress(views)
+    if pg: p['progress'] = pg
+    tbps, tsrc = extract_treasury_bps(views, code)
+    if tbps is not None: p['treasury_bps'] = tbps; p['treasury_src'] = tsrc
 
     # 名字 / 官网
     name = cname
@@ -333,6 +397,7 @@ def analyze(a, vinfo):
     if to_owner: p['bnb_to_project'] = to_owner
     if payable and (to_owner or re.search(r'\b(treasury|feeTo|feeRecipient|devWallet|teamWallet|marketingWallet|payee|beneficiary)\b', body_with_helpers(fns, pay_names[0]) if pay_names else '', re.I)):
         tb = [v for k, v in (bps or {}).items() if re.search(r'treasury|team|dev(?!iation)|marketing', k, re.I)]
+        if not tb and tbps is not None: tb = [tbps]
         if tb and max(tb) <= 3000: safe.append(f'项目方抽成 {max(tb)/100:.0f}%（≤30%）')
         elif tb: risk.append(f'项目方抽成 {max(tb)/100:.0f}%（>30%）')
         else: risk.append('付款（部分或全部）直接进项目方地址，比例未能从源码读出')
@@ -404,6 +469,7 @@ def analyze(a, vinfo):
     if token_pay:
         p['pay_in_erc20'] = token_pay
         if isinstance(views.get('firstPrice'), int) and views.get('firstPrice') == 0: p['first_share_free'] = True
+        if tbps is not None: (safe.append(f'项目方抽成 {tbps/100:.0f}%（≤30%）') if tbps <= 3000 else risk.append(f'项目方抽成 {tbps/100:.0f}%（>30%）'))
         if re.search(r'transferFrom\(\s*msg\.sender\s*,\s*(treasury|owner|dev|team|feeTo)', ''.join(body_with_helpers(fns, n) for n in token_pay), re.I):
             risk.append('代币付款直接进项目方 treasury')
     claim_fns = [f['name'] for f in abif if f.get('stateMutability') == 'nonpayable' and re.search(r'claim|harvest|withdraw|redeem|unlock', f['name'], re.I) and not any(is_priv(x) for x in fns.get(f['name'], []))]
@@ -496,6 +562,18 @@ def main():
             open(EV, 'a').write(json.dumps(ev, ensure_ascii=False) + '\n'); print(json.dumps(ev, ensure_ascii=False), flush=True)
         outd['refundmine_candidates'] = sorted(x for x, r in res.items() if r.get('category') == 'refund_deposit' and r.get('refundmine_ok'))
         dump(OUT, outd); dump(ST, st)
+    # 2026-11-03 03:21 统一付费自动买：每轮重读已识别合约的进度；≥60%、未开池、结论 pass、付费类 → 后台拉起 autofill.py（全部闸门在 autofill 里查；本脚本自己仍不签名不交易）
+    if time.time() < DEADLINE + 40:
+        fresh = refresh_progress(res); stats['progress_refreshed'] = len(fresh)
+        hot60 = [a for a, r in fresh if r['params']['progress']['pct'] >= 60 and r['params']['progress']['pct'] <= 100 and r.get('category') in ('paid_mint', 'fair_launch')
+                 and r.get('conclusion') == 'pass']
+        trig = load('discover_out/newtpl_autofill_trig.json', {})
+        hot60 = [a for a in hot60 if time.time() - trig.get(a, 0) >= 300]
+        if hot60 and '--no-autofill' not in sys.argv:
+            for a in hot60: trig[a] = time.time()
+            dump('discover_out/newtpl_autofill_trig.json', trig); stats['autofill_triggered'] = hot60
+            subprocess.Popen(['bash', '-c', f'cd {D} && timeout 900 python3 autofill.py > discover_out/autofill_newtpl.json 2>&1'], start_new_session=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     outd['last_run'] = stats
     outd['refundmine_candidates'] = sorted(a for a, r in res.items() if r.get('category') == 'refund_deposit' and r.get('refundmine_ok'))
     dump(OUT, outd); dump(ST, st)

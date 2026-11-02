@@ -560,3 +560,18 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 输出：discover_out/newtpl.json（每合约 name、合约、类别、关键参数、热度、safe_flags、risk_flags、结论、邀请参数、官网）、discover_out/newtpl_events.jsonl（只写新识别或类别/结论变化的），状态 newtpl_state.json。手动：`python3 newtpl.py --test 0x…`（不写状态）。
 - 交易边界：只有 refund_deposit + pass + refundmine 闸门（已验证、非代理、合约余额 ≥ 应退押金）的合约进 newtpl.json 的 refundmine_candidates；refundmine.py 读它并入候选，但仍要求 AGC 接口选择器齐全并每次重查全部闸门（押金 ≤0.02 BNB/号/天、留 0.003 BNB、preview 干净）。接口不同的押金全退盘只出分析，不挖。其他类别一律不做任何交易，只出分析，付费仍按原有付费规则（简报 → 用户确认 / 自动付费闸门）。
 - 回归：AGC → refund_deposit / pass / refundmine_ok=true；币安无忧（jager，0xb63e…7697）→ fair_launch / review（国库比例在源码里是运算得出，读不出；jager 仍走原 autoaudit）；HalloweenAgents 0x0962…6054、MothAgent 0x872d…5491 → paid_mint / reject（owner withdraw）；AgentMint FLY4 0x4444…af69 → paid_mint / review（ERC20 付款进 treasury）。
+
+## 【覆盖·2026-11-03 03:21 用户「是都要等60%才对 全部改统一规则 适配全部项目」】唯一付费自动买规则
+- 任何付费项目（fair mint 各模板、jagent、boltbook、newtpl 识别的新模板等）：销售/开池进度 ≥60% 且安全闸门全过（源码验证、不可升级/代理可解析、项目方不能提走资金、国库 ≤30%、储备 ≥65% 或退款、Agent ID 钱包 ≥100、单地址 ≤30%、audit/info/riskcheck 无高危、税 ≤10%、未开池、preview 干净、精确授权、留 0.003 BNB）才自动买；全天；不限单笔；每号每项目 ≤30U；每号每天合计 ≤100U。
+- 读不出进度的（无上限/无开池份数、已开池二级买入）不自动买，只出简报。普通付费不再有「过闸即买」的单独路径。
+
+## 【实现·2026-11-03 03:4x】统一付费自动买落地（对应 03:21 覆盖条）
+- autofill.py = 唯一付费自动买入口。候选：discover_out/fairmint.json 的 watch_unopened（进度 ≥60%、非猜测、≤100%）+ discover_out/newtpl.json 里 params.progress.pct ≥60、未开池的 paid_mint/fair_launch。读不出进度的进 brief_only（只简报）。
+- 执行器按模板分派：burnmix_buy.py（BurnAgentMixed）/ fair_buy.py（Jager/AGI：quotaOf+costOf+mintedCount+mint 5 参）/ bnb_fair_buy.py（mintWithBnb(uint256,address,uint256)）/ generic_buy.py（其余：ABI 唯一入口且参数为 (uint256 份数) 或 (uint256, address 邀请人)，BNB payable 或 BSC USDT transferFrom）。生成不了安全 calldata → 跳过并写原因。
+- generic_buy：份数 = min(合约每号剩余（paidRemainingFor/remainingFor/allowanceOf/PER_WALLET−已买…）, floor(预算×0.97/单价))；预算 = min(100U 日剩余, 30U 项目累计剩余)；USDT 只 approve 精确成本，成交后 allowance>0 就 approve 0；每号 preview（唯一转出=付款币且金额=成本）干净才 execute；confirm.py 核对到账；unknown 不重发。成交写 auto_buy.json positions（auto:true），possell 按统一卖出规则管。
+- 闸门（与 03:21 条一致，另保留原有「部署者 24h ≥3 个不同名字的盘 → 不买」）：jager 审计看 audit_ok；其他模板看 autoaudit --report 的 audit_report（没有就当场跑）；generic 另查 newtpl 源码分析（reject/特权提币/可升级/增发/税>10%/LP 非黑洞 → 不买）、国库 bps（TREASURY_BPS / 10000−LP_BPS / 源码常量，读不出 → 不买）、合约实留储备 ≥65% 或有退款函数。
+- quota.py：daily_used（auto_buy + autofill 当日，≤100U/号）+ project_used（按合约跨天累计，≤30U/号）；`quota.py --project 0x…` 看单项目额度。手动确认买入不计入自动额度。
+- newtpl.py：analyze 写 params.progress（sold_fn/cap_fn/open_fn/pct）和 params.treasury_bps；每轮重读进度，≥60% 且 pass 的付费类拉起 autofill（newtpl 自己仍不交易）。
+- fastprogress：所有模板 ≥60% 且审计通过（jager=audit_ok，其他=audit_report）即拉起 autofill；非 jager 模板 ≥40% 就提前跑通用审计。fairmint.py 不再标 autofill_supported=False。
+- `python3 autofill.py --dry [--only 0x…]`：只预演，dry 时闸门失败也继续评估其余闸门，gates[合约] 给出每项结果、gates_failed、would_buy。
+- 备份 *.bak_1103unify。

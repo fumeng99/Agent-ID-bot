@@ -642,7 +642,7 @@ def main():
                    'has_refund': v.get('has_refund'), 'template': v.get('template'), 'bscscan': f'https://bscscan.com/address/{a}'}
             if v.get('token'): row['token_url'] = f"https://bscscan.com/token/{v['token']}"
             if v.get('cost_1share_token_units') and not v.get('cost_1share_bnb'): row['cost_1share_token_units'] = v['cost_1share_token_units']; row['price_currency'] = v.get('price_currency')
-            if v.get('template') not in (None, 'jager'): row['autofill_supported'] = False  # fair_buy.py 只会 Jager/AGI 的 quotaOf/costOf/mint：其他模板 ≥70% 只提醒
+            # 2026-11-03 03:21 统一规则：不再按模板标 autofill_supported=False，全部模板 ≥60% 交 autofill.py 按模板分派执行器、查全部闸门
             if v.get('can_open_early'): row['can_open_early'] = v['can_open_early']
             if v.get('deadline_ts'): row['deadline_cst'] = time.strftime('%m-%d %H:%M', time.gmtime(v['deadline_ts'] + 8 * 3600))
             if a in stale_set: row['stale'] = True  # 本轮读数失败，显示的是上一轮的数
@@ -682,7 +682,7 @@ def main():
             watch, near, just_opened2, started2 = build_rows()
             just_opened += [r for r in just_opened2 if r['contract'] not in {x['contract'] for x in just_opened}]
             started += [r for r in started2 if r['contract'] not in {x['contract'] for x in started}]
-            if any(r['open_pct'] >= 60 for r in watch if r['contract'] in hs): break  # 过 70% 立刻交给巡逻处理
+            if any(r['open_pct'] >= 60 for r in watch if r['contract'] in hs): break  # 过 60% 立刻交给巡逻/autofill 处理
     for a in set(targets):
         if a not in stale_set: found[a]['last_open_pct'] = open_pct(found[a])[0]  # 读失败的不更新基线，下轮 Δ 才准
     save()

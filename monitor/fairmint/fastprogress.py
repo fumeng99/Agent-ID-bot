@@ -136,7 +136,7 @@ def step(found, st, aok):
         eta = lambda lvl: (round((lvl - pct) / rate, 1) if rate and rate > 0 and pct < lvl else None)
         row = {'contract': a, 'name': nm, 'template': tpl, 'open_pct': pct, 'minted': minted, 'open_at_shares': oa,
                'rate_pct_per_min': rate, 'eta_70_min': eta(60), 'eta_open_min': eta(100),
-               'bscscan': f'https://bscscan.com/address/{a}', 'autofill_supported': tpl in (None, 'jager')}
+               'bscscan': f'https://bscscan.com/address/{a}', 'autofill_supported': True}  # 2026-11-03 03:21 统一规则：全部模板都交 autofill 判（执行器/闸门在 autofill 里）
         if opened:
             kind = 'early_open' if minted < oa else 'open'
             if kind not in s['alerted']:
@@ -172,8 +172,8 @@ def step(found, st, aok):
         elif a not in aok and tpl == 'jager' and 'auto_audit' in s['alerted'] and time.time() - s.get('audit_at', 0) >= 60 \
                 and (a in pend or time.time() - s.get('audit_at', 0) >= 170) and (pct >= 30 or (rate or 0) >= 2 or (row['eta_70_min'] or 999) <= 30):
             out.setdefault('auto_audit_started', []).append(a); out.setdefault('audit_retry', []).append(a); launch_audit(a, s, pct)
-        # 非 Jager 模板（jagent 等，autofill 不支持）≥60%：跑通用审计出报告（audit_report.json），读失败同样 60 秒后重审；不写 audit_ok、不触发买入
-        if tpl not in ('jager', None) and pct >= 60 and pct <= 100 and time.time() - s.get('audit_at', 0) >= 60 \
+        # 非 Jager 模板（jagent/boss/mao 等）：≥40% 提前跑通用审计（audit_report.json），读失败 60 秒后重审；2026-11-03 03:21 起 report pass = 这些模板的审计闸门，60% 时 autofill 用
+        if tpl not in ('jager', None) and pct >= 40 and pct <= 100 and time.time() - s.get('audit_at', 0) >= 60 \
                 and (rep.get(a) is None or (rep[a].get('status') == 'unknown')) and s.get('report_n', 0) < 30:
             s['report_n'] = s.get('report_n', 0) + 1; out.setdefault('report_audit_started', []).append(a); launch_audit(a, s, pct, report=True)
         # 2026-11-01 19:27 BNBHolder：自动审计因「源码未验证」不通过的热盘，开池前每 2 分钟重跑一次只读审计（项目方常在开铸后才验证源码）；人工结论不动
@@ -182,12 +182,13 @@ def step(found, st, aok):
             s['reaudit_at'] = time.time(); out.setdefault('auto_audit_started', []).append(a); launch_audit(a, s, pct)
         # 2026-11-02：autofill 因读失败（unknown）没买的盘 → 45–60 秒后重跑 autofill（全部闸门照旧、文件锁 + filled 防重复）
         rc = recheck.get(a)
-        if rc and pct >= 60 and (aok.get(a) or {}).get('ok') and time.time() - rc.get('at', 0) >= 45 and time.time() - s.get('refill_at', 0) >= 60 and '--no-fastfill' not in argv:
+        _aud = (aok.get(a) or {}).get('ok') if tpl in ('jager', None) else (rep.get(a) or {}).get('ok')  # 统一规则：jager 看 audit_ok，其他模板看通用审计 audit_report
+        if rc and pct >= 60 and _aud and time.time() - rc.get('at', 0) >= 45 and time.time() - s.get('refill_at', 0) >= 60 and '--no-fastfill' not in argv:
             s['refill_at'] = time.time(); out.setdefault('autofill_recheck_started', []).append(a); launch_autofill(a, row, found, out)
         # 2026-11-01 安小将教训：已审计通过、还没到 70% 的热盘 = armed，主循环不因 urgent 退出，继续 5 秒盯到 70% 触发快速通道
-        if pct < 60 and (aok.get(a) or {}).get('ok') and 'fastfill' not in s['alerted'] and (pct >= 30 or (rate or 0) >= 3):
+        if pct < 60 and _aud and 'fastfill' not in s['alerted'] and (pct >= 30 or (rate or 0) >= 3):
             out.setdefault('armed', []).append(a)
-        if pct >= 60 and (aok.get(a) or {}).get('ok') and 'fastfill' not in s['alerted'] and '--no-fastfill' not in argv:
+        if pct >= 60 and pct <= 100 and _aud and 'fastfill' not in s['alerted'] and '--no-fastfill' not in argv:  # 统一规则：任何模板 ≥60% 且审计通过 → autofill（其余闸门 autofill 再查）
             s['alerted'].append('fastfill'); out.setdefault('fastfill_started', []).append(a); launch_autofill(a, row, found, out)
     out['hot'].sort(key=lambda r: -r['open_pct'])
     return out
