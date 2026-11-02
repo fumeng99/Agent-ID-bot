@@ -1,4 +1,5 @@
 #!/bin/bash
+python3 -c "import Crypto" 2>/dev/null || pip install -q pycryptodome >/dev/null 2>&1
 # 常驻快速进度看门狗（2026-11-01 安小将教训：定时任务之间有空档，热盘 4 分钟冲满）。
 # 每次运行：若 fastprogress 常驻进程不在，就后台起一个跑 14 分钟（--daemon，文件锁保证只有一个）。
 # 「Fair mint 快速进度」和「免费Mint巡逻」两个任务每 10 分钟各调一次、错开 5 分钟 → 任何时刻都有常驻进程在盯，没有空档。

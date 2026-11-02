@@ -4,7 +4,7 @@
 通过条件（与人工审计同口径，一条没放宽）：
   1. mint 合约与代币合约源码均已验证（verify_source.py，Sourcify/BscScan，含字节码指纹一致）
   2. mint 合约、代币合约都不可升级（codeutil.upgradeable）
-  3. 国库抽成 treasury_bps ≤ 2000（≤20%）
+  3. 国库抽成 treasury_bps ≤ 3000（≤30%，2026-11-03 01:17 用户「那就改成30%」）
   4. 代币 minter() == mint 合约
   5. 币安 query-token-audit：hasResult 且 isSupported，风险不是 HIGH
   6. riskcheck.py 不判为貔貅（honeypot != True）、不可升级
@@ -119,8 +119,8 @@ def audit(m):
             st, r = strict(m, 'TREASURY_BPS()')
             if st == 'ok' and r and len(r) >= 66: tb = int(r[:66], 16)
             elif st == 'unknown': unk.append(f'国库抽成 TREASURY_BPS() 读取失败（{r[:60]}）')
-            elif tpl == 'jager': bad.append('合约没有 TREASURY_BPS()，无法确认国库抽成 ≤20%')
-        if tb is not None and tb > 2000: bad.append(f'国库抽成 {tb} bps 超过 20%')
+            elif tpl == 'jager': bad.append('合约没有 TREASURY_BPS()，无法确认国库抽成 ≤30%')
+        if tb is not None and tb > 3000: bad.append(f'国库抽成 {tb} bps 超过 30%')
     if tok:
         st, r = strict(tok, 'minter()')
         if st == 'ok' and r and len(r) >= 66:
