@@ -44,7 +44,7 @@ def _logs(c, f, t, t_end):
                 b = min(a + step - 1, t); got = None
                 for k in range(6):
                     try:
-                        d = _post(u, {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getLogs', 'params': [{'address': c, 'topics': [F.TOPICS], 'fromBlock': hex(a), 'toBlock': hex(b)}]},
+                        d = _post(u, {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getLogs', 'params': [{'address': c, 'topics': [F.TOPICS + ['0xe3b496b99aec1054d29fa1f0466ca0d95fe13a9ab830d3a32138b7fb5613f1b8']], 'fromBlock': hex(a), 'toBlock': hex(b)}]},
                                   max(2, min(8, t_end - time.time())))
                         if 'result' in d: got = d['result']; break
                         last = f'{u}: {str(d.get("error"))[:120]}'

@@ -54,6 +54,12 @@ def mark_unknown(row, a, why):
 for row in FM.get('watch_unopened', []):
     a = row['contract'].lower(); v = FOUND.get(a, {})
     if row['open_pct'] < 60 or v.get('opened'): continue
+    # 2026-11-03 用户「按照你推荐优化」：BurnAgentMixed 类（mint(id,qty,expectedStart,…)）用 burnmix_buy.py 打满（快速重试、六号并发）
+    BM = {}
+    try: BM = json.loads(subprocess.run(['python3', f'{D}/burnmix_buy.py', a, '--probe'], capture_output=True, text=True, timeout=60).stdout.strip().splitlines()[-1])
+    except Exception: BM = {}
+    if BM.get('burnmix'):
+        row = dict(row, autofill_supported=True, reserve_missing=False); v = dict(v, pending_bnb_bnb=BM.get('pending_liq_bnb'), total_paid_bnb=BM.get('paid_bnb'))
     if row.get('autofill_supported') is False: out['skipped'].append((row['name'], a, row['open_pct'], f"{row.get('template')} 模板，fair_buy.py 不支持，只提醒不自动打满")); continue  # 2026-11-01 审计：份数固定 10（与 100U 预算一致，原 999 可能超额）；fairmint 新识别的 JAGENT/Boss/Mao 模板不进自动买
     if row.get('reserve_missing'): out['skipped'].append((row['name'], a, row['open_pct'], f"募资 {row.get('total_paid_bnb')} BNB 没留在合约做开池储备（pendingBnb=0），资金已流出，审计不过")); continue
     if row.get('progress_suspect') or row['open_pct'] > 100: out['skipped'].append((row['name'], a, row['open_pct'], '进度超过 100% 仍未开池，开池份数读错，不可信，不自动打满')); continue
@@ -126,7 +132,10 @@ for row in FM.get('watch_unopened', []):
     est = each * len(accs)
     if not DRY and not tu and v.get('cost_1share_bnb'):
         out.setdefault('swaps', []).extend(topup_bnb(v['cost_1share_bnb'] * 10 + 0.0045, BNBU))
-    res = subprocess.run(['python3', f'{D}/fair_buy.py', a, ok.get('token') or v.get('token'), '10', '--max', str(round(per_u * 1.1, 4))] + (['--dry'] if DRY else []) + accs,
+    if BM.get('burnmix'):
+        res = subprocess.run(['python3', f'{D}/burnmix_buy.py', a, '--max-bnb', str(round((v.get('cost_1share_bnb') or 0.002) * 10 * 1.15 + 0.001, 4))] + (['--dry'] if DRY else []) + accs,
+                             capture_output=True, text=True, timeout=600).stdout
+    else: res = subprocess.run(['python3', f'{D}/fair_buy.py', a, ok.get('token') or v.get('token'), '10', '--max', str(round(per_u * 1.1, 4))] + (['--dry'] if DRY else []) + accs,
                          capture_output=True, text=True, timeout=600).stdout
     lines = res.splitlines(); out['bought'].append({'name': row['name'], 'contract': a, 'open_pct': row['open_pct'], 'per_share_u': round(per_u, 3), 'result': lines})
     if any('insufficient' in l or 'low_bnb' in l for l in lines):
