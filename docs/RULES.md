@@ -472,3 +472,11 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 
 ## 学习笔记（2026-11-02 05:xx）
 - 学习源 v3.0.0（桌面雷达/插件/英文界面/UI）已读 diff。主体是界面与插件，对我们无需移植。已有同类：授权巡逻（approvals_watch.py 只告警）、getLogs 指定节点并发。未采纳：①对方「无限授权给陌生合约自动 revoke」——会自动执行 approve 类操作，超出用户授权，仅作建议；②用户可自行调高单笔金额上限——不放宽用户规则；③模拟需付手续费时提示为付费项目——我们已按 value>0 需确认处理；④BSC 捆绑≤15%、前10大≤30%、真实买家≥30 的 AGTOK 门槛——属更严买入条件，建议问用户是否采用。
+
+## 2026-11-02 13:00 修复记录（不改变任何买卖/额度/安全规则）
+- fairmint exit=4 根因：agentai.meme 的 QuickNode 公开节点（fluent-lively-diagram…）约 09:50 起 TLS 握手失败已停用；其他公共节点不支持「无地址 getLogs」宽区间，每段 getLogs 都失败、重试耗光 100 秒 → watchdog exit=4（stderr 无报错行）。现在无地址 getLogs 走 `LOGS_RPCS`（rpc-bsc.48.club / 0.48.club / bsc.rpc.blxrbdn.com，500 块一段 4 线程并发，失败再 25 块切小走 blockrazor），批量 eth_call 4 线程并发、全量刷新最多用 70% 时限（读不完的标 stale 沿用上轮），已部署未开铸最多补最近 12000 块，历史状态不支持时跳过补部署者。heatscan/minters 同样改用 `_post_logs`。环境变量 `FM_LOGS_RPC` 可放自己的节点。
+- 23:36–00:50 的「logs <区块> n=…」不是错误，是 fairmint 的进度行被 fail_streak 当成最后一行报错；fail_streak 现在只取像报错的行。
+- opencheck 超时：468 个候选 ×9 个 eth_call 原来串行。现在 6 秒超时、4 批并发、RPC 截止 60 秒、DexScreener 并发；75 秒看门狗输出上一轮结果（opencheck_last.json，stale=true，exit=5）。
+- 自检修复：discover_all.sh 末尾跑 selfheal.py：某步连续失败第 3/6/9… 轮时清 rpcpool 冷却、体检节点、缩小范围重跑一次，成功覆盖输出并清零；仍失败才进 fail_streak alert（含 selfheal 字段）。
+- 免费盘永久跳过：seen.json 条目 `skip_permanent:true`（整盘不再预检/补领）、`skip_accounts:{号:原因}`（该号不再算 ok_accounts、不补领）。DOG 0xa7be…936a：mint 需授权扣代币（token spending limit not approved），非纯免费，永久跳过。NULLSECTOR 0x9395…73cd 002/海贼王：资格正常但 mintFree 全合集每 10 块 1 个免费槽、全局抢槽，上链被抢先 revert（SlotNotOpen），永久跳过不再重试。
+- 币安安 0x4220…1d：每号约 0.45U（≥0.3U）、冲击约 1%，但币安钱包 market-order quote 报「No liquidity available」（换 USDT/WBNB 都一样，只有 PancakeSwap V2 一个约 82U 的小池，路由不收录）→ 预演不过按规则 D 不下单；06:15 放弃保持。possell 现在小仓失败也记 last_err。

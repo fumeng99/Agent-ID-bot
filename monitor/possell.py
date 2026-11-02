@@ -191,6 +191,7 @@ def step(st, out):
                     out['sold'].append({'name': P['name'], 'token': t, 'acc': l, 'why': kind, 'pct': pct, 'value_u': round(v * pct / 100, 2), 'order': r.get('orderId') if isinstance(r, dict) else r, 'url': q['url']})
                 else:
                     sa['fail'] = sa.get('fail', 0) + 1; sa['next'] = time.time() + 60 * 2 ** min(sa['fail'] - 1, 5)
+                    sa['last_err'] = str(r)[:200]  # 2026-11-02：<3U 的小仓失败原来不记原因（币安安放弃后查不到为什么），现在每次都记最后一次错误
                     if v < R['smallU'] and sa['fail'] >= R['smallMaxFail']: sa['done'] = True; sa['gaveup'] = now()
                     if sa['fail'] == 1 and v >= R['smallU']: out['errors'].append(f"{P['name']}｜{l}｜{kind} 卖出失败，自动退避重试：{str(r)[:120]}")
 

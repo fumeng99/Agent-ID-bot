@@ -3,8 +3,22 @@
 每个项目只提醒一次（seen.json 里记 open_alerted）。输出 JSON：{"new_open":[...], "checked":N}。
 用法：python3 opencheck.py [--dry]   （--dry 不写回 seen.json）
 """
-import json, sys, urllib.request
-from rpcpool import batch
+import json, os, sys, time, threading, urllib.request
+from rpcpool import batch as _batch
+T0 = time.time()
+LAST = '$AIDBOT_DATA/opencheck_last.json'
+# 2026-11-02 修复（02:48–03:23、12:4x 连续 exit=124）：持仓候选 468 个 ×（6 号余额 + 3 个报价池）≈4200 个 eth_call，
+# 原来 40 条一批串行、每节点 10 秒超时，公共节点限流时 >90 秒。现在：单次请求 6 秒超时、4 批并发、RPC 截止 T0+60 秒；
+# DexScreener/Gecko 并发查；超过 75 秒还没完 → 看门狗输出上一轮成功结果（stale=true）并 exit=5，不留空文件、不写 seen.json。
+OC_DEADLINE = T0 + float(os.environ.get('OC_RPC_BUDGET', '60'))
+def batch(calls, tolerant=False):
+    return _batch(calls, tolerant=tolerant, timeout=6, deadline=OC_DEADLINE, parallel=4)
+def _fallback(reason):
+    try: o = json.load(open(LAST))
+    except Exception: o = {'checked': 0}
+    o.update(new_open=[], stale=True, note=f'本轮未完成（{reason}），沿用上一轮结果；新开盘下一轮再查')
+    os.write(1, (json.dumps(o, ensure_ascii=False) + '\n').encode()); os._exit(5)
+_wd = threading.Timer(float(os.environ.get('OC_WATCHDOG', '75')), _fallback, args=('超过 75 秒',)); _wd.daemon = True; _wd.start()
 
 SEEN = '$AIDBOT_DATA/seen.json'
 ACC = '$AIDBOT_HOME/baw/accounts/accounts.json'
@@ -77,7 +91,8 @@ calls = []
 for x in cands:
     c = x['contract']
     calls += [('eth_call', [{'to': c, 'data': '0xfc0c546a'}, 'latest']), ('eth_call', [{'to': c, 'data': '0x313ce567'}, 'latest'])]
-R = batch(calls, tolerant=True) if calls else []
+try: R = batch(calls, tolerant=True) if calls else []
+except Exception as e: _fallback(f'RPC 失败：{str(e)[:80]}')
 items = []
 for i, x in enumerate(cands):
     t = x.get('token')
@@ -91,14 +106,18 @@ calls = []
 for x, t in items:
     calls += [('eth_call', [{'to': t, 'data': '0x70a08231' + w(a['bsc'])}, 'latest']) for a in A]
     calls += [('eth_call', [{'to': V2, 'data': '0xe6a43905' + w(t) + w(q)}, 'latest']) for q in QUOTES]
-R = batch(calls, tolerant=True) if calls else []
+try: R = batch(calls, tolerant=True) if calls else []
+except Exception as e: _fallback(f'RPC 失败：{str(e)[:80]}')
 n = len(A) + len(QUOTES); new = []
+_held = [t for i, (x, t) in enumerate(items) if any(ok(r) and int(r, 16) for r in R[i * n:i * n + len(A)])]
+from concurrent.futures import ThreadPoolExecutor
+with ThreadPoolExecutor(8) as _ex: DS = dict(zip(_held, _ex.map(lambda t: dexscreener(t) or gecko(t), _held)))
 for i, (x, t) in enumerate(items):
     seg = R[i * n:(i + 1) * n]
     held = sum(int(r, 16) for r in seg[:len(A)] if ok(r))
     if held == 0: continue
     pair_onchain = next(('0x' + r[-40:] for r in seg[len(A):] if ok(r) and int(r, 16)), None)
-    ds = dexscreener(t) or gecko(t)
+    ds = DS.get(t) if t in DS else (dexscreener(t) or gecko(t))
     if not ds and pair_onchain:
         # 有池地址但 DexScreener 没收录：看储备
         try:
@@ -133,5 +152,8 @@ for i, (x, t) in enumerate(items):
                 'verdict': None if pnl is None else ('赚' if pnl > 0 else '亏' if pnl < 0 else '持平'), **ds})
     if not DRY: x['open_alerted'] = True; x['opened_info'] = ds
 
-if new and not DRY: json.dump(S, open(SEEN, 'w'), ensure_ascii=False, indent=1)
-print(json.dumps({'checked': len(items), 'new_open': new}, ensure_ascii=False))
+_wd.cancel()
+if new and not DRY: json.dump(S, open(SEEN + '.tmp', 'w'), ensure_ascii=False, indent=1); os.replace(SEEN + '.tmp', SEEN)
+out = {'checked': len(items), 'held': len(_held), 'new_open': new, 'elapsed_s': round(time.time() - T0, 1)}
+if not DRY: json.dump(dict(out, new_open=[], time=time.strftime('%Y-%m-%d %H:%M', time.gmtime(time.time() + 8 * 3600))), open(LAST, 'w'), ensure_ascii=False)
+print(json.dumps(out, ensure_ascii=False))

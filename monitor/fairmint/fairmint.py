@@ -29,10 +29,16 @@ OPEN_TOPICS = [OPENED] + ['0x' + CU.kec(x.encode()).hex() for x in ('EarlyOpened
 PAIR_CREATED = '0x0d3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9'
 V2_FACTORY = '0xca143ce32fe78f1f7019d7d551a6402fc5350c73'
 REG = CU.REG
-QN = 'https://fluent-lively-diagram.bsc.quiknode.pro/b791d0a1526852ab53f99b98dc50390986bda4b7'  # agentai.meme 前端公开节点，允许无地址 getLogs、支持批量和历史状态
-RPCS = [QN, 'https://bsc.blockrazor.xyz', 'https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.bnbchain.org', 'https://bsc-dataseed1.defibit.io',
-        'https://bsc-dataseed2.ninicoin.io', 'https://1rpc.io/bnb', 'https://bsc.drpc.org']
-RANGE = int(os.environ.get('FM_RANGE', '3000'))
+# 2026-11-02 修复：agentai.meme 的 QuickNode 公开节点从 11-02 约 09:50 起 TLS 握手失败（tlsv1 alert internal error，节点已停用），
+# 其余公共节点不允许「无地址 getLogs」（blockrazor 限 25 块、publicnode 要求 address、dataseed limit exceeded）→ 每段 getLogs 都失败、
+# rpc() 重试 3 轮把 100 秒时限耗光，watchdog exit=4 且 stderr 为空。现在无地址 getLogs 改走 LOGS_RPCS（实测 500 块 3–8 秒），
+# 多段并发；全部失败再按 25 块切小走 blockrazor。环境变量 FM_LOGS_RPC（逗号分隔）可放自己的节点，优先使用。
+LOGS_RPCS = [u for u in os.environ.get('FM_LOGS_RPC', '').split(',') if u] + ['https://rpc-bsc.48.club', 'https://0.48.club', 'https://bsc.rpc.blxrbdn.com']
+SMALL_LOGS_RPC = 'https://bsc.blockrazor.xyz'  # 无地址 getLogs 限 25 块
+QN = LOGS_RPCS[0]  # 兼容旧引用（heatscan/minters 改用 _post_logs 自动换节点）
+RPCS = ['https://bsc.blockrazor.xyz', 'https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.bnbchain.org', 'https://bsc-dataseed1.defibit.io',
+        'https://bsc-dataseed2.ninicoin.io', 'https://rpc-bsc.48.club', 'https://0.48.club', 'https://bsc-mainnet.public.blastapi.io', 'https://bsc.drpc.org']  # 1rpc 已 403 且慢（5 秒），移除
+RANGE = int(os.environ.get('FM_RANGE', '500'))  # 2026-11-02：3000 → 500（LOGS_RPCS 单段 500 块实测 3–8 秒）
 BAD = {}  # 节点冷却（学 v2.4.9 多节点轮替）：报错/限流的节点 120 秒内排到最后
 
 
@@ -43,6 +49,40 @@ def _post(u, body, to=15):
 def _nodes():
     now = time.time(); ok = [u for u in RPCS if BAD.get(u, 0) < now]
     return ok + [u for u in RPCS if u not in ok]
+
+
+LOGS_BAD = {}
+def _post_logs(body, to=15):
+    """无地址 getLogs：依次试 LOGS_RPCS（冷却 60 秒的排后），返回第一个带 result 的响应；全失败抛最后的错误。"""
+    now = time.time(); order = sorted(LOGS_RPCS, key=lambda u: LOGS_BAD.get(u, 0) > now); last = None
+    for u in order:
+        if time.time() > DEADLINE - 3: break
+        try:
+            d = _post(u, body, max(2, min(to, DEADLINE - 3 - time.time())))
+            if isinstance(d, dict) and 'result' in d: return d
+            last = d.get('error') if isinstance(d, dict) else d
+        except Exception as e: last = e
+        LOGS_BAD[u] = time.time() + 60
+    raise RuntimeError(f'getLogs 全部节点失败：{str(last)[:160]}')
+
+
+def logs_seg(f, t, topics, address=None):
+    """一段 [f,t] 的 getLogs：先 LOGS_RPCS 整段；失败再按 25 块切小走 blockrazor（并发 4）。"""
+    q = {'fromBlock': hex(f), 'toBlock': hex(t), 'topics': topics}
+    if address: q['address'] = address
+    try: return _post_logs({'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getLogs', 'params': [q]})['result']
+    except Exception as e1:
+        if t - f + 1 > 25 * 40: raise
+        from concurrent.futures import ThreadPoolExecutor
+        def small(a):
+            q2 = dict(q, fromBlock=hex(a), toBlock=hex(min(a + 24, t)))
+            for k in range(3):
+                d = _post(SMALL_LOGS_RPC, {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getLogs', 'params': [q2]}, 8)
+                if 'result' in d: return d['result']
+                time.sleep(0.5 * (k + 1))
+            raise RuntimeError(f'blockrazor {a}: {d.get("error")}')
+        with ThreadPoolExecutor(4) as ex: parts = list(ex.map(small, range(f, t + 1, 25)))
+        return [l for p in parts for l in p]
 
 
 RPC_FAIL = [0]  # 本轮最终没读到（非 revert）的调用数
@@ -71,16 +111,24 @@ def rpc(m, p):
     raise RuntimeError(err)
 
 
-def bat(calls, chunk=40):
-    """批量 JSON-RPC：[(method, params)] -> [result|None]。revert 的单项返回 None；限流/节点错误的单项换节点只重发失败项。"""
+BAT_DL = [None]  # 2026-11-02：阶段截止时间（info_many 全量刷新最多用到总时限的 75%，读不完的盘沿用上轮读数并标 stale）
+def bat(calls, chunk=20, parallel=4):
+    """批量 JSON-RPC：[(method, params)] -> [result|None]。revert 的单项返回 None；限流/节点错误的单项换节点只重发失败项。
+    2026-11-02：QuickNode 停用后改为各分批 4 线程并发（原来串行 + 每批 0.35 秒间隔，238 个盘全量刷新 >50 秒导致 watchdog 超时）。"""
+    parts = [calls[k:k + chunk] for k in range(0, len(calls), chunk)]
+    if len(parts) > 1 and parallel > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(min(parallel, len(parts))) as ex: rs = list(ex.map(lambda c: bat(c, chunk, 1), parts))
+        return [x for r in rs for x in r]
     out = []
     for k in range(0, len(calls), chunk):
-        if k: time.sleep(0.35)  # QuickNode 125 次/秒按批内条数计，连发会被限流
+        if k: time.sleep(0.35)
+        if time.time() > (BAT_DL[0] or DEADLINE - 8): out += [None] * len(calls[k:k + chunk]); continue
         part = calls[k:k + chunk]; res = [None] * len(part); pending = list(range(len(part)))
         for rnd in range(2):
             for u in _nodes():
                 if not pending: break
-                if time.time() > DEADLINE - 8: break
+                if time.time() > (BAT_DL[0] or DEADLINE - 8): break
                 body = [{'jsonrpc': '2.0', 'id': i, 'method': part[i][0], 'params': part[i][1]} for i in pending]
                 try:
                     r = _post(u, body, 20)
@@ -320,15 +368,24 @@ def predeploy(st, found, start, head):
         if dep and dep not in devs and not v.get('opened'): devs[dep] = {'at': now, 'next': v.get('deploy_nonce', 0) + 1, 'from_known': a}
     # PairCreated（V2 工厂，按地址过滤，公共节点也允许）
     pf = st['pre_last'] + 1 if 'pre_last' in st else head - 48000  # 首次启用回看约 6 小时，补抓已部署未开铸的盘
-    pf = max(pf, head - 48000); hashes = {}
+    # 2026-11-02：QuickNode 停用后按地址 getLogs 也只剩 48club 能查宽区间（1000 块约 8 秒）。改为 500 块一段 4 线程并发、
+    # 本步最多用到总时限的 55%；落后超过 12000 块（约 1.5 小时）只补最近 12000 块（这一步只是「已部署未开铸」预警，
+    # 真正开铸的盘仍由主扫描的 Minted 事件发现，不会漏）。
+    pf = max(pf, head - 48000, head - 12000); hashes = {}
+    from concurrent.futures import ThreadPoolExecutor
+    pend = T0 + (DEADLINE - T0) * 0.4
+    psegs = [(x, min(x + RANGE - 1, head)) for x in range(pf, head + 1, RANGE)]
+    def _pseg(r):
+        if time.time() > pend: return None
+        try: return logs_seg(r[0], r[1], [PAIR_CREATED], address=V2_FACTORY) or []
+        except Exception as e: return e
+    with ThreadPoolExecutor(4) as ex: pres = list(ex.map(_pseg, psegs))
     f = pf
-    while f <= head and time.time() < DEADLINE - 40:
-        t = min(f + RANGE - 1, head)
-        try:
-            for l in rpc('eth_getLogs', [{'address': V2_FACTORY, 'topics': [PAIR_CREATED], 'fromBlock': hex(f), 'toBlock': hex(t)}]) or []:
-                hashes[l['transactionHash']] = (int(l['blockNumber'], 16), '0x' + l['topics'][1][-40:], '0x' + l['topics'][2][-40:])
-            f = t + 1
-        except Exception: break
+    for (x, t), logs in zip(psegs, pres):
+        if logs is None or isinstance(logs, Exception): break
+        for l in logs: hashes[l['transactionHash']] = (int(l['blockNumber'], 16), '0x' + l['topics'][1][-40:], '0x' + l['topics'][2][-40:])
+        f = t + 1
+    sys.stderr.write(f'predeploy {pf}->{f - 1}/{head} pairs={len(hashes)} {time.time()-T0:.1f}s\n')
     st['pre_last'] = f - 1
     hs = list(hashes)
     for h, tx in zip(hs, bat([('eth_getTransactionByHash', [h]) for h in hs]) if hs else []):
@@ -372,6 +429,16 @@ def predeploy(st, found, start, head):
 def backfill_deployers(found, head, budget=3):
     """found.json 里缺部署者的未开池合约：二分查创建块 → 找出部署交易，记 deployer/deploy_nonce（每轮最多 budget 个，节点支持历史状态才做）。"""
     todo = [a for a, v in found.items() if not v.get('opened') and 'deployer' not in v][:budget]
+    # 2026-11-02：QuickNode 停用后公共节点都不支持历史状态（getCode@旧块 → not supported），rpc() 会把剩余时限全耗在重试上。
+    # 先用 5 秒探一次，没有节点支持就整步跳过（这一步只是补「部署者」字段，不影响进度和买卖）。
+    if todo:
+        ok = False
+        for u in RPCS[:4]:
+            try:
+                if 'result' in _post(u, {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getCode', 'params': [todo[0], hex(head - 600000)]}, 5): ok = True; break
+            except Exception: pass
+        if not ok:
+            sys.stderr.write('backfill_deployers: 无节点支持历史状态，跳过\n'); return
     for a in todo:
         if time.time() > DEADLINE - 30: break
         try:
@@ -434,22 +501,27 @@ def main():
     seen_now, errors = {}, 0
     # 2026-11-01 审计：原来某段 getLogs 失败就 f=t+1 跳过、且最后无条件 st['last']=head —— 失败段里的新盘永久漏掉。
     # 现在失败段换节点重试 2 次（缩小区间），仍失败就停在这里，st['last'] 只推进到最后一段成功的块，下轮从断点续扫。
-    f = start; scanned_to = start - 1; seg_fail = 0
-    while f <= head:
-        t = min(f + (RANGE if seg_fail == 0 else max(200, RANGE // (2 * seg_fail))) - 1, head)
-        try:
-            logs = rpc('eth_getLogs', [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [TOPICS + OPEN_TOPICS]}])
-            for l in logs:
-                a = l['address'].lower()
-                if l['topics'][0] != TOPICS[0]:  # 开池类事件：只标记已知盘，陌生合约（同名事件很常见）不当成新 fair mint
-                    if a in found or a in seen_now: seen_now.setdefault(a, {'mints': 0, 'opened_evt': False, 'first_block': int(l['blockNumber'], 16)})['opened_evt'] = True
-                    continue
-                e = seen_now.setdefault(a, {'mints': 0, 'opened_evt': False, 'first_block': int(l['blockNumber'], 16)}); e['mints'] += 1
-            scanned_to = t; f = t + 1; seg_fail = 0; sys.stderr.write(f'logs {t} n={len(seen_now)}\n')
-        except Exception:
-            errors += 1; seg_fail += 1
-            if seg_fail > 2 or errors > 8 or time.time() > DEADLINE - 40: break
-            time.sleep(1)
+    # 2026-11-02：多段并发（4 线程）；按顺序处理，遇到第一段失败就停，st['last'] 只推进到最后一段成功的块，下轮从断点续扫。
+    from concurrent.futures import ThreadPoolExecutor
+    scanned_to = start - 1; log_end = T0 + (DEADLINE - T0) * 0.45
+    segs = [(f, min(f + RANGE - 1, head)) for f in range(start, head + 1, RANGE)]
+    def _seg(r):
+        if time.time() > log_end: return None
+        try: return logs_seg(r[0], r[1], [TOPICS + OPEN_TOPICS])
+        except Exception as e: return e
+    with ThreadPoolExecutor(4) as ex: seg_res = list(ex.map(_seg, segs))
+    for (f, t), logs in zip(segs, seg_res):
+        if logs is None: break
+        if isinstance(logs, Exception):
+            errors += 1; sys.stderr.write(f'logs {f}-{t} 失败：{str(logs)[:160]}\n'); break
+        for l in logs:
+            a = l['address'].lower()
+            if l['topics'][0] != TOPICS[0]:  # 开池类事件：只标记已知盘，陌生合约（同名事件很常见）不当成新 fair mint
+                if a in found or a in seen_now: seen_now.setdefault(a, {'mints': 0, 'opened_evt': False, 'first_block': int(l['blockNumber'], 16)})['opened_evt'] = True
+                continue
+            e = seen_now.setdefault(a, {'mints': 0, 'opened_evt': False, 'first_block': int(l['blockNumber'], 16)}); e['mints'] += 1
+        scanned_to = t
+    sys.stderr.write(f'logs {start}->{scanned_to}/{head} 段={len(segs)} n={len(seen_now)} err={errors} {time.time()-T0:.1f}s\n')
     prev_open = {a: v.get('opened') for a, v in found.items()}
     prev_minted = {a: v.get('total_minted') for a, v in found.items()}
     prev_tpl = {a: v.get('template') for a, v in found.items()}  # 本轮刚识别出模板的盘：第一次算出的进度不算「暴涨」、opened 变化不算「刚开池」
@@ -457,6 +529,7 @@ def main():
     pre_new, pre_other, pre_err = [], [], None
     try: pre_new, pre_other = predeploy(st, found, start, head)
     except Exception as e: pre_err = str(e)[:160]
+    sys.stderr.write(f'predeploy done err={pre_err} {time.time()-T0:.1f}s\n')
     # ①③ 本轮有事件的 + 全部未开池（3 天内发现的）一次批量刷新
     now = time.time()
     def fresh(v):  # first_seen_cst 是北京时间
@@ -473,9 +546,15 @@ def main():
         return (a not in seen_now and v.get('_has_minted_evt') and v.get('template') in TPL and (v.get('last_open_pct') or 0) < 5
                 and not v.get('opened') and now - v.get('_refr_at', 0) < 1200 and v.get('total_minted') is not None)
     skipped_quiet = {a for a in unopened if quiet(a, found[a])}
-    targets = list(seen_now) + [a for a in unopened if a not in skipped_quiet]
+    # 2026-11-02：限流时读不完全部盘 → 按重要程度排序（本轮有事件 > 进度高 > 上次刷新早），读不到的沿用上轮读数并标 stale
+    rest = sorted([a for a in unopened if a not in skipped_quiet], key=lambda a: (-(found[a].get('last_open_pct') or 0), found[a].get('_refr_at', 0)))
+    targets = list(seen_now) + rest
     code_cache = {}
+    sys.stderr.write(f'refresh targets={len(targets)} quiet={len(skipped_quiet)} {time.time()-T0:.1f}s\n')
+    BAT_DL[0] = T0 + (DEADLINE - T0) * 0.7
     infos = info_many(targets, prev=found, code_cache=code_cache)
+    BAT_DL[0] = None
+    sys.stderr.write(f'info_many done {time.time()-T0:.1f}s\n')
     for a in targets:
         i = infos[a]
         if a not in found:
@@ -511,6 +590,7 @@ def main():
     for a in targets:
         try: guess_cap(a, found[a])
         except Exception: pass
+    sys.stderr.write(f'pre-backfill {time.time()-T0:.1f}s\n')
     backfill_deployers(found, head)
     stale_set = {a for a in targets if not infos.get(a, {}).get('_read_ok')}
     for a in targets: found[a].pop('_read_ok', None)

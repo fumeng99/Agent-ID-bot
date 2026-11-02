@@ -24,6 +24,14 @@ def load(p, d):
     except Exception: return d
 
 errc = load(ERRCACHE, {}); sold = load(SOLD, {})
+# 2026-11-02：seen.json 里标了 skip_permanent（如 DOG：mint 要授权扣代币，非纯免费）的合约不再预检；
+# skip_accounts（如 NULLSECTOR 002/海贼王：全局抢槽，上链常 revert 烧 gas）里的号不再算进 ok_accounts，避免每轮重试。
+SKIP, SKIP_ACC = {}, {}
+for _x in load(os.path.join(D, 'seen.json'), []):
+    if not isinstance(_x, dict) or not _x.get('contract'): continue
+    _c = str(_x['contract']).lower()
+    if _x.get('skip_permanent'): SKIP[_c] = _x.get('skip_reason') or _x.get('status') or 'seen.json 永久跳过'
+    if _x.get('skip_accounts'): SKIP_ACC[_c] = _x['skip_accounts']
 
 def errname(sel):
     if sel in KNOWN: return KNOWN[sel]
@@ -65,22 +73,25 @@ res = []
 for c in items():
     t = c['mint_target'].lower()
     if t in sold: continue
+    if t in SKIP: res.append({'name': c.get('name'), 'target': t, 'status': 'skip_permanent', 'reasons': [SKIP[t][:160]], 'ok_accounts': []}); continue
     if time.time() > DEADLINE: res.append({'name': c.get('name'), 'target': t, 'status': 'not_checked'}); continue
     sel = c.get('selector', '')
     data = c.get('calldata') or (sel + ('1'.rjust(64, '0') if c.get('selector_name', '').endswith('(uint256)') else ''))
     per = {}
     for a in ACC:
+        _lab = a.get('label') or a.get('name') or a['bsc'][:8]
+        if _lab in SKIP_ACC.get(t, {}): per[_lab] = 'skip_account: ' + str(SKIP_ACC[t][_lab]); continue
         st, why = call(a['bsc'], t, data); per[a.get('label') or a.get('name') or a['bsc'][:8]] = why if st != 'ok' else 'ok'
         if 'SoldOut' in why or 'sold out' in why.lower(): break
     oks = [k for k, v in per.items() if v == 'ok']
-    reasons = sorted({v for v in per.values() if v != 'ok'})
+    reasons = sorted({v for v in per.values() if v != 'ok' and not str(v).startswith('skip_account')})
     paid = any(k in r for r in reasons for k in ('WrongPayment', 'InsufficientPayment', 'IncorrectPayment', 'InvalidPayment', 'insufficient'))
     status = 'mintable' if oks else ('soldout' if any('SoldOut' in r or 'sold out' in r.lower() for r in reasons) else ('paid' if paid else 'revert'))
     if status == 'soldout': sold[t] = {'name': c.get('name'), 'at': time.strftime('%Y-%m-%d %H:%M')}
     res.append({'name': c.get('name'), 'target': t, 'selector': sel, 'source': c.get('source', 'transfer_mint'), 'status': status, 'ok_accounts': oks,
                 'reasons': reasons, 'bscscan': c.get('bscscan')})
 
-order = {'mintable': 0, 'not_checked': 1, 'revert': 2, 'paid': 3, 'soldout': 4}
+order = {'mintable': 0, 'not_checked': 1, 'revert': 2, 'paid': 3, 'soldout': 4, 'skip_permanent': 5}
 res.sort(key=lambda r: order.get(r['status'], 9))
 json.dump(sold, open(SOLD, 'w'), ensure_ascii=False, indent=1)
 json.dump(errc, open(ERRCACHE, 'w'), ensure_ascii=False, indent=1)

@@ -26,7 +26,7 @@ def ai_minters(c, deploy_block=None, budget=40):
     while f <= head:
         if time.time() - t0 > budget: return None
         t = min(f + STEP - 1, head)
-        d = F._post(F.QN, {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getLogs', 'params': [{'address': c, 'topics': [F.TOPICS], 'fromBlock': hex(f), 'toBlock': hex(t)}]}, 30)
+        d = F._post_logs({'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getLogs', 'params': [{'address': c, 'topics': [F.TOPICS], 'fromBlock': hex(f), 'toBlock': hex(t)}]}, 30)
         if 'result' not in d: return None
         for l in d['result']:
             if len(l['topics']) > 1:

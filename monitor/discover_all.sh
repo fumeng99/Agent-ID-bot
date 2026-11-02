@@ -51,10 +51,17 @@ for ln in open(os.path.join(O, 'summary.txt')):
     if ok: streak[n] = 0; last.pop(n, None)
     else:
         streak[n] = streak.get(n, 0) + 1
-        try: last[n] = (open(os.path.join(O, n + '.err')).read().strip().splitlines() or [''])[-1][:200] or f'exit={rc}'
+        # 2026-11-02：只取像报错的行（原来取 stderr 最后一行，fairmint 的进度行「logs <块> n=…」被当成错误上报）
+        try:
+            ls = [l.strip() for l in open(os.path.join(O, n + '.err')).read().splitlines() if l.strip()]
+            bad = [l for l in ls if re.search(r'error|exception|traceback|失败|超时|timeout|timed out|refused|denied|429|403|50\d', l, re.I)]
+            last[n] = bad[-1][:200] if bad else f'exit={rc}（stderr 无报错行）'
         except Exception: last[n] = f'exit={rc}'
 alert = [{'step': n, 'rounds': c, 'last_err': last.get(n, '')} for n, c in streak.items() if c >= 3]
 json.dump({'streak': streak, 'last_err': last, 'alert': alert}, open(F, 'w'), ensure_ascii=False, indent=1)
-print('fail_streak alert:', json.dumps(alert, ensure_ascii=False))
+print('fail_streak alert(自检前):', json.dumps(alert, ensure_ascii=False))
 PY
+# 2026-11-02：某步连续 3 轮失败（第 3/6/9… 轮）自动自检修复一次：节点体检 + 清冷却 + 缩小范围重跑，成功就覆盖输出并清零；仍失败才进 alert
+( s=$(date +%s); cd $D && timeout 130 python3 selfheal.py "$O" > $O/selfheal.out 2>&1; echo "selfheal(自检) exit=$? 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
+python3 -c "import json,sys;print('fail_streak alert:', json.dumps(json.load(open(sys.argv[1])).get('alert', []), ensure_ascii=False))" "$O/fail_streak.json" 2>/dev/null
 cat "$O/summary.txt"

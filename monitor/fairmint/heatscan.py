@@ -47,9 +47,9 @@ def main():
     while f <= head and time.time() < F.DEADLINE - 45:
         t = min(f + CHUNK - 1, head)
         try:
-            logs = F._post(F.QN, {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getLogs', 'params': [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [TRANSFER, ZERO]}]}, 30)
-            logs2 = F._post(F.QN, {'jsonrpc': '2.0', 'id': 2, 'method': 'eth_getLogs', 'params': [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [T1155, None, ZERO]}]}, 30)
-            logs3 = F._post(F.QN, {'jsonrpc': '2.0', 'id': 3, 'method': 'eth_getLogs', 'params': [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [UPG_TOPICS]}]}, 30)
+            logs = F._post_logs({'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getLogs', 'params': [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [TRANSFER, ZERO]}]}, 30)
+            logs2 = F._post_logs({'jsonrpc': '2.0', 'id': 2, 'method': 'eth_getLogs', 'params': [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [T1155, None, ZERO]}]}, 30)
+            logs3 = F._post_logs({'jsonrpc': '2.0', 'id': 3, 'method': 'eth_getLogs', 'params': [{'fromBlock': hex(f), 'toBlock': hex(t), 'topics': [UPG_TOPICS]}]}, 30)
             for l in logs3.get('result') or []: upg_hits.setdefault(l['address'].lower(), int(l['blockNumber'], 16))
             if 'result' not in logs or 'result' not in logs2: raise RuntimeError(str(logs.get('error') or logs2.get('error'))[:120])
             for l in logs['result'] + logs2['result']:
