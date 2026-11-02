@@ -512,3 +512,7 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - fmkick.sh：discoverd 不设寿命，心跳 >180 秒或进程不在就重启；每种常驻进程（fastprogress / possell / discoverd）多于一份时只留持锁那份。discoverd 每轮顺手跑一次 fmkick（flock 防重叠），任何常驻进程掉线 ≤60 秒内拉起。
 - fairmint.py：主扫描严格从断点续扫（只有首次无断点才回看 --minutes），predeploy 去掉「只补最近 12000 块」，都改成本轮扫不完下轮接着扫。
 - 回放工具（只读）：backtest/discovery/{sweep.py, timeline.py, deployblk.py, replay_run.py}，`discoverd.py --replay FROM TO` 用与常驻进程同一套判定按 60 秒一轮模拟。结果 timeline.json / deploy_blocks.json / replay_results.json / REPLAY.md。
+
+## 2026-11-02 18:02 自动打满门槛 70% → 60%（用户原话「那就改60%」）
+- 付费分档 fair mint 开池进度 ≥60%（按开池份数、非猜测）即触发 autofill 每号打满；其余闸门一条不变：审计通过、源码已验证（含字节码指纹放行）、不可升级、国库 ≤20%、minter==mint、非高危、非貔貅、未开池、Agent ID 铸造钱包 ≥100、每号每天 ≤100U、退款函数或实测储备 ≥75%；jagent 等非 jager 模板仍只提醒。
+- 提醒与审计相应提前：≥30% 简报不变，60% 即打满（不再单独有 70% 档）；fastprogress 预热钱包数从 50% 提前到 40%，预计 ≤15 分钟到 60% 就提前审计；fairmint.py 快速重读区间改 40–60%。代码里字段名 eta_70_min 保留，含义已是「到 60% 分钟数」。备份 *.bak_1102d。

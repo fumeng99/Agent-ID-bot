@@ -668,7 +668,7 @@ def main():
     watch, near, just_opened, started = build_rows()
     # ③ 本轮快速重读（v2.4.3）：50–70% 区间、刚开铸、或本轮涨 ≥10 个点的，每 20 秒重读，直到总时限
     rechecks = 0
-    hot = lambda: [r['contract'] for r in watch if not r.get('open_pct_guess') and (50 <= r['open_pct'] < 70 or r['delta_pct'] >= 10 or r.get('premint') and (r['total_minted'] or 0) > 0)]
+    hot = lambda: [r['contract'] for r in watch if not r.get('open_pct_guess') and (40 <= r['open_pct'] < 60 or r['delta_pct'] >= 10 or r.get('premint') and (r['total_minted'] or 0) > 0)]
     if '--no-recheck' not in sys.argv:
         while hot() and time.time() + 25 < DEADLINE and rechecks < 4:
             time.sleep(20); rechecks += 1
@@ -682,7 +682,7 @@ def main():
             watch, near, just_opened2, started2 = build_rows()
             just_opened += [r for r in just_opened2 if r['contract'] not in {x['contract'] for x in just_opened}]
             started += [r for r in started2 if r['contract'] not in {x['contract'] for x in started}]
-            if any(r['open_pct'] >= 70 for r in watch if r['contract'] in hs): break  # 过 70% 立刻交给巡逻处理
+            if any(r['open_pct'] >= 60 for r in watch if r['contract'] in hs): break  # 过 70% 立刻交给巡逻处理
     for a in set(targets):
         if a not in stale_set: found[a]['last_open_pct'] = open_pct(found[a])[0]  # 读失败的不更新基线，下轮 Δ 才准
     save()

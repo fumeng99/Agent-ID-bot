@@ -53,7 +53,7 @@ def mark_unknown(row, a, why):
     out.setdefault('unknown', []).append((row['name'], a, row['open_pct'], why[:300] + '｜unknown：本轮不买，60 秒内重读'))
 for row in FM.get('watch_unopened', []):
     a = row['contract'].lower(); v = FOUND.get(a, {})
-    if row['open_pct'] < 70 or v.get('opened'): continue
+    if row['open_pct'] < 60 or v.get('opened'): continue
     if row.get('autofill_supported') is False: out['skipped'].append((row['name'], a, row['open_pct'], f"{row.get('template')} 模板，fair_buy.py 不支持，只提醒不自动打满")); continue  # 2026-11-01 审计：份数固定 10（与 100U 预算一致，原 999 可能超额）；fairmint 新识别的 JAGENT/Boss/Mao 模板不进自动买
     if row.get('reserve_missing'): out['skipped'].append((row['name'], a, row['open_pct'], f"募资 {row.get('total_paid_bnb')} BNB 没留在合约做开池储备（pendingBnb=0），资金已流出，审计不过")); continue
     if row.get('progress_suspect') or row['open_pct'] > 100: out['skipped'].append((row['name'], a, row['open_pct'], '进度超过 100% 仍未开池，开池份数读错，不可信，不自动打满')); continue
@@ -137,7 +137,7 @@ for row in FM.get('watch_unopened', []):
         led.setdefault('filled', {})[a] = True; spent += est
         for l in accs: per_acc[l] = per_acc.get(l, 0) + each
         json.dump(led, open(LED, 'w'), ensure_ascii=False, indent=1)
-_proc = {r['contract'].lower() for r in FM.get('watch_unopened', []) if r.get('open_pct', 0) >= 70}
+_proc = {r['contract'].lower() for r in FM.get('watch_unopened', []) if r.get('open_pct', 0) >= 60}
 for _a in list(recheck):
     if _a not in _rc_seen and (_a in _proc or time.time() - recheck[_a].get('at', 0) > 3600): recheck.pop(_a)  # 本轮已有确定结论（买/跳过）或 1 小时前的旧条目 → 移除
 if not DRY: json.dump(recheck, open(RECHK + '.tmp', 'w'), ensure_ascii=False); os.replace(RECHK + '.tmp', RECHK)

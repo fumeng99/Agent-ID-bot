@@ -135,7 +135,7 @@ def step(found, st, aok):
         rate = round((minted - base[1]) * 100 / oa / ((now - base[0]) / 60), 2) if base and now - base[0] >= 30 else None  # %/分钟
         eta = lambda lvl: (round((lvl - pct) / rate, 1) if rate and rate > 0 and pct < lvl else None)
         row = {'contract': a, 'name': nm, 'template': tpl, 'open_pct': pct, 'minted': minted, 'open_at_shares': oa,
-               'rate_pct_per_min': rate, 'eta_70_min': eta(70), 'eta_open_min': eta(100),
+               'rate_pct_per_min': rate, 'eta_70_min': eta(60), 'eta_open_min': eta(100),
                'bscscan': f'https://bscscan.com/address/{a}', 'autofill_supported': tpl in (None, 'jager')}
         if opened:
             kind = 'early_open' if minted < oa else 'open'
@@ -152,7 +152,7 @@ def step(found, st, aok):
         if pct >= 30 and (rate or 0) >= 2 and 'hot_alert' not in s['alerted']:
             s['alerted'].append('hot_alert'); out.setdefault('hot_alert', []).append(row)
         if pct >= MIN or (row['eta_70_min'] is not None and row['eta_70_min'] <= 30):
-            if pct >= 50 and (DAEMON or time.time() - T0 < FP_DEADLINE - 12):  # B1 预热（单次模式剩余时间不够就不扫，避免超时）：提前把 Agent ID 铸造钱包数算进缓存，70% 时 autofill 不用临时扫
+            if pct >= 40 and (DAEMON or time.time() - T0 < FP_DEADLINE - 12):  # B1 预热（单次模式剩余时间不够就不扫，避免超时）：提前把 Agent ID 铸造钱包数算进缓存，70% 时 autofill 不用临时扫
                 try:
                     import minters as _MN; _r = _MN.ai_minters(a, budget=8) or {}; row['ai_minters'] = _r.get('ai_minters') if _r.get('status') == 'ok' else 'unknown'
                 except Exception: pass
@@ -182,12 +182,12 @@ def step(found, st, aok):
             s['reaudit_at'] = time.time(); out.setdefault('auto_audit_started', []).append(a); launch_audit(a, s, pct)
         # 2026-11-02：autofill 因读失败（unknown）没买的盘 → 45–60 秒后重跑 autofill（全部闸门照旧、文件锁 + filled 防重复）
         rc = recheck.get(a)
-        if rc and pct >= 70 and (aok.get(a) or {}).get('ok') and time.time() - rc.get('at', 0) >= 45 and time.time() - s.get('refill_at', 0) >= 60 and '--no-fastfill' not in argv:
+        if rc and pct >= 60 and (aok.get(a) or {}).get('ok') and time.time() - rc.get('at', 0) >= 45 and time.time() - s.get('refill_at', 0) >= 60 and '--no-fastfill' not in argv:
             s['refill_at'] = time.time(); out.setdefault('autofill_recheck_started', []).append(a); launch_autofill(a, row, found, out)
         # 2026-11-01 安小将教训：已审计通过、还没到 70% 的热盘 = armed，主循环不因 urgent 退出，继续 5 秒盯到 70% 触发快速通道
-        if pct < 70 and (aok.get(a) or {}).get('ok') and 'fastfill' not in s['alerted'] and (pct >= 30 or (rate or 0) >= 3):
+        if pct < 60 and (aok.get(a) or {}).get('ok') and 'fastfill' not in s['alerted'] and (pct >= 30 or (rate or 0) >= 3):
             out.setdefault('armed', []).append(a)
-        if pct >= 70 and (aok.get(a) or {}).get('ok') and 'fastfill' not in s['alerted'] and '--no-fastfill' not in argv:
+        if pct >= 60 and (aok.get(a) or {}).get('ok') and 'fastfill' not in s['alerted'] and '--no-fastfill' not in argv:
             s['alerted'].append('fastfill'); out.setdefault('fastfill_started', []).append(a); launch_autofill(a, row, found, out)
     out['hot'].sort(key=lambda r: -r['open_pct'])
     return out
