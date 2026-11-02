@@ -24,7 +24,8 @@ for b in f.get('buys', []):
     for l in (b.get('accounts') or labels): fill[l] = fill.get(l, 0) + b.get('est_u_each', b.get('est_u', 0) / len(labels))
 mx = max(per.values()) if per else 0
 print(json.dumps({'day_cst': day, 'rule30_per_account_used_u': {k: round(v, 2) for k, v in per.items()},
-                  'rule30_per_account_left_u': {k: round(max(0, 30 - v), 2) for k, v in per.items()},
+                  'rule30_per_account_left_u': {k: round(max(0, 100 - fill.get(k, v)), 2) for k, v in per.items()},  # 2026-11-03 02:36 用户「单项目30u 每天一个号总100u」：普通付费不再单独 30U/天，每项目每号 ≤30U，日总额 100U/号含打满
+                  'per_project_cap_u': 30, 'daily_total_cap_u': 100,
                   'rule30_total_used_u': round(s30, 2),
                   'fill_per_account_used_u': {k: round(v, 2) for k, v in fill.items()}, 'fill_per_account_left_u': {k: round(max(0, 100 - v), 2) for k, v in fill.items()},
-                  'line': '30U/号 已用 ' + ' · '.join(f'{k} {v:.2f}' for k, v in per.items()) + '｜打满 100U/号 已用 ' + ' · '.join(f'{k} {v:.2f}' for k, v in fill.items())}, ensure_ascii=False))
+                  'line': '普通付费已用 ' + ' · '.join(f'{k} {v:.2f}' for k, v in per.items()) + '（每项目每号 ≤30U）｜全部付费 100U/号/天 已用 ' + ' · '.join(f'{k} {v:.2f}' for k, v in fill.items())}, ensure_ascii=False))
