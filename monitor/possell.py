@@ -23,7 +23,7 @@ args = sys.argv[1:]; DRY = '--dry' in args
 def opt(k, d): return float(args[args.index(k) + 1]) if k in args else d
 LOOP, EVERY = opt('--loop', 0), opt('--every', 20)
 R = dict(backX=2, steps=[(10, 30), (20, 50)], crash=0.35, crashAfterBack=0.50, moonPct=20, moonNotify=[50, 100], notifyX=[5, 10, 20],
-         freeDrop=0.40, freeWaitSec=180, minU=0.3, smallU=3, smallMaxFail=6, earlyX=1.5, earlyWin=600, impact=0.15, fastWin=900)
+         freeDrop=0.40, freeWaitSec=180, minU=0.3, smallU=3, smallMaxFail=6, earlyX=1.5, earlyWin=600, impact=0.15, fastWin=1800)
 
 
 def cst_hour(): return time.gmtime(time.time() + 8 * 3600).tm_hour
@@ -35,8 +35,48 @@ def get(u):
     return json.load(urllib.request.urlopen(urllib.request.Request(u, headers={'User-Agent': 'Mozilla/5.0'}), timeout=15))
 
 
-def prices(tokens):
-    out = {}
+def chain_prices(pairs):
+    """2026-11-03 用户「太慢了 这种开盘的波动很快的」：已知池子的直接链上读 getReserves（每块新鲜），不等 DexScreener 索引延迟。
+    pairs: {token: pair}，只支持代币/WBNB 池；读失败的返回里没有，调用方再走 DexScreener。"""
+    out = {}; W = 'bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c'
+    miss = [t for t in pairs if not pairs[t]]
+    if miss:  # 刚开池还没池子地址：PancakeSwap V2 工厂 getPair 链上直接查
+        try:
+            prs = batch([('eth_call', [{'to': '0xca143ce32fe78f1f7019d7d551a6402fc5350c73', 'data': '0xe6a43905' + t[2:].rjust(64, '0') + W.rjust(64, '0')}, 'latest']) for t in miss], tolerant=True)
+            for t, r in zip(miss, prs):
+                if isinstance(r, str) and len(r) >= 66 and int(r, 16): pairs[t] = '0x' + r[-40:]
+        except Exception: pass
+    ks = [t for t in pairs if pairs[t]]
+    if not ks: return out
+    bu = bnb_u() or 0
+    if not bu: return out
+    try:
+        res = batch([('eth_call', [{'to': pairs[t], 'data': '0x0902f1ac'}, 'latest']) for t in ks] + [('eth_call', [{'to': pairs[t], 'data': '0x0dfe1682'}, 'latest']) for t in ks]
+                    + [('eth_call', [{'to': pairs[t], 'data': '0xd21220a7'}, 'latest']) for t in ks] + [('eth_call', [{'to': t, 'data': '0x313ce567'}, 'latest']) for t in ks], tolerant=True)
+    except Exception: return out
+    n = len(ks)
+    for i, t in enumerate(ks):
+        try:
+            rv, dc = res[i], int(res[3 * n + i] or '0x12', 16)
+            t0 = (res[n + i] or '')[-40:].lower(); t1 = (res[2 * n + i] or '')[-40:].lower()
+            if not t0 and t1: t0 = t[2:] if t1 == W else (W if t1 == t[2:] else '')
+            if not t1 and t0: t1 = W if t0 == t[2:] else (t[2:] if t0 == W else '')
+            if W not in (t0, t1) or t[2:] not in (t0, t1): continue
+            r0, r1 = int(rv[2:66], 16), int(rv[66:130], 16)
+            rt, rw = (r0, r1) if t0 == t[2:] else (r1, r0)
+            liq = 2 * rw / 1e18 * bu
+            if rt and liq >= 50: out[t] = {'px': rw / 1e18 / (rt / 10 ** dc) * bu, 'liq': liq, 'url': f'https://dexscreener.com/bsc/{pairs[t]}', 'created': 0, 'pair': pairs[t], 'src': 'chain'}
+        except Exception: pass
+    return out
+
+
+_DS = [0]
+UNPRICED = [False]
+def prices(tokens, pairs=None):
+    out = chain_prices(pairs or {})
+    tokens_all = tokens; tokens = [t for t in tokens if t not in out]
+    if tokens and time.time() - _DS[0] < 15: return out  # 外部接口限流保护：链上读不到的（未开池/非 WBNB 池）最多 15 秒查一次 DexScreener
+    if tokens: _DS[0] = time.time()
     for i in range(0, len(tokens), 30):
         try: ps = get('https://api.dexscreener.com/latest/dex/tokens/' + ','.join(tokens[i:i + 30])).get('pairs') or []
         except Exception: continue
@@ -72,7 +112,15 @@ def prices(tokens):
     return out
 
 
-def bnb_u():  # PancakeSwap 路由报价 1 BNB → USDT（Binance API 在此地区 451）
+_BU = [0, 0]
+def bnb_u():
+    if time.time() - _BU[1] < 30 and _BU[0]: return _BU[0]
+    v = _bnb_u_raw()
+    if v: _BU[0], _BU[1] = v, time.time()
+    return v
+
+
+def _bnb_u_raw():  # PancakeSwap 路由报价 1 BNB → USDT（Binance API 在此地区 451）
     try:
         r = batch([('eth_call', [{'to': '0x10ed43c718714eb63d5aa57b78b54704e256024e', 'data': '0xd06ca61f' + hex(10**18)[2:].rjust(64, '0') + '40'.rjust(64, '0') + '2'.rjust(64, '0') + 'bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c'.rjust(64, '0') + '55d398326f99059ff775485246999027b3197955'.rjust(64, '0')}, 'latest'])])[0]
         return int(r[-64:], 16) / 1e18
@@ -107,7 +155,9 @@ def sell(t, pct, labels, slip='8'):
 def step(st, out):
     pos = positions(); toks = list(pos)
     if not toks: return
-    pr = prices(toks); bu = bnb_u()
+    _pairs = {t: (st.get(t) or {}).get('pair') or (str((st.get(t) or {}).get('url') or '').split('/bsc/')[-1] if '/bsc/0x' in str((st.get(t) or {}).get('url') or '') else None) for t in toks}
+    pr = prices(toks, _pairs); bu = bnb_u()
+    UNPRICED[0] = any(t not in pr and not (st.get(t) or {}).get('last') for t in toks)  # 有仓位还没开池 → 2 秒一轮查开池
     if bu is None:  # 2026-11-02：BNB 价读失败 → 付费仓位倍数算不出，重试 2 次，仍失败记 unknown（不当没触发也不乱卖）
         for _k in range(2):
             time.sleep(1 + _k); bu = bnb_u()
@@ -126,6 +176,7 @@ def step(st, out):
         if t not in pr: continue
         P = pos[t]; q = pr[t]; px = q['px']; s = st.setdefault(t, {'name': P['name'], 'acc': {}})
         s.setdefault('first', time.time()); s['peak'] = max(s.get('peak', 0), px); s['last'] = px; s['url'] = q['url']
+        if q.get('pair'): s['pair'] = q['pair']
         opened_at = q['created'] or s['first']
         # 学  貔貅/转账锁检查：开池后先用持币号模拟「把 1% 转进池子」（等于卖出路径），revert 就提醒且不自动卖
         if 'hp' not in s and q.get('pair', '').startswith('0x'):
@@ -231,7 +282,7 @@ def main():
         if '--daemon' in args:
             json.dump({'heartbeat': int(time.time()), 'time_cst': now(), 'pid': os.getpid()}, open(f'{D}/discover_out/possell_live.json', 'w'))
             fresh = any(v.get('first') and time.time() - v['first'] <= R['fastWin'] for v in st.values() if isinstance(v, dict))
-            gap = 3 if fresh else EVERY
+            gap = 1 if fresh else (2 if UNPRICED[0] else EVERY)  # 2026-11-03 用户「太慢了」：开池 30 分钟内 1 秒一轮（价格链上直读）
             json.dump(out, open(f'{D}/discover_out/possell_daemon_out.json', 'w'), ensure_ascii=False, indent=1)
         if not LOOP or time.time() + gap > end: break
         time.sleep(gap)
