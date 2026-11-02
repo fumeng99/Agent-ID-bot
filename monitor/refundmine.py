@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""押金全退型挖矿（AGC 模板）自动挖 + 自动领回。用户 2026-11-03 01:56「要」（每天自动挖）+「这种为什么没监控到 自动打」。
+模板识别（字节码同时含）：mintFree(uint256,address)、claimFree(uint256[])、quota(address,uint256)、refundOwed()、REFUND_DELAY()、PRICE_PER_SHARE()。
+闸门（每次都查，任何一项不过就不挖，只领回）：源码已验证（verify_source，含指纹）；非代理（EIP-1967 实现槽为空）；合约 BNB 余额 ≥ refundOwed（押金全额可退）；
+quota.open 且未暂停；每号每天押金 ≤ 0.02 BNB；扣押金和 gas 后钱包仍 ≥ 0.003 BNB；每号 preview 干净（只扣押金）才 execute；unknown 不重发。
+领回：claimFree([]) value=0，有到期仓位才发，preview 干净才 execute（只增 BNB 和代币）。不卖出。
+目标：refundmine_targets.json 手动列表 + fairmint/found.json / chainscan/candidates.json / discover_out/newtpl.json(refundmine_candidates) 中自动识别出的合约。discoverd 每轮约 60 秒拉起（flock）。
+usage: refundmine.py [--dry] [合约...]"""
+import sys, os, json, time
+D = os.path.dirname(os.path.abspath(__file__)); os.chdir(D)
+args = sys.argv[1:]; DRY = '--dry' in args
+manual = [a.lower() for a in args if a.startswith('0x')]
+sys.argv = ['fair_buy.py', '0x' + '0' * 40, '0x' + '0' * 40, '10'] + (['--dry'] if DRY else [])
+src = open('fair_buy.py').read(); exec(src.split('from concurrent.futures import ThreadPoolExecutor')[0])
+from rpcpool import batch, rpc
+import subprocess
+ST = 'refundmine_state.json'; OUT = 'discover_out/refundmine.json'; TG = 'refundmine_targets.json'
+NEED = [sel(s).replace('0x', '') for s in ('mintFree(uint256,address)', 'claimFree(uint256[])', 'quota(address,uint256)', 'refundOwed()', 'REFUND_DELAY()', 'PRICE_PER_SHARE()')]
+CAP = int(0.02e18); KEEP = int(0.003e18); GAS = int(0.0002e18)
+IMPL_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
+def load(p, d):
+    try: return json.load(open(p))
+    except Exception: return d
+st = load(ST, {}); tg = set(load(TG, [])) | set(manual)
+cand = set()
+for a in load('fairmint/found.json', {}): cand.add(a.lower())
+for c in load('chainscan/candidates.json', []) if isinstance(load('chainscan/candidates.json', []), list) else []:
+    for k in ('contract', 'mint_target'):
+        if isinstance(c, dict) and c.get(k): cand.add(c[k].lower())
+# 2026-11-03 newtpl.py：新模板自动识别出的押金全退型（refund_deposit + 结论 pass + 闸门通过）并入候选；下面仍要求 AGC 接口选择器齐全 + 每次全部闸门
+for a in (load('discover_out/newtpl.json', {}) or {}).get('refundmine_candidates', []) or []: cand.add(str(a).lower())
+cand = [a for a in cand if a not in tg and not (st.get(a, {}).get('not_type') and time.time() - st[a].get('t', 0) < 12 * 3600)]
+if cand:
+    codes = dict(zip(cand, batch([('eth_getCode', [c, 'latest']) for c in cand], tolerant=True, chunk=40)))
+    for a, code in codes.items():
+        if not code or len(code) < 10: continue
+        if all(x in code.lower() for x in NEED): tg.add(a)
+        else: st[a] = {'not_type': True, 't': time.time()}
+json.dump(sorted(tg), open(TG, 'w'))
+out = {'time': time.strftime('%m-%d %H:%M', time.gmtime(time.time() + 8 * 3600)), 'targets': sorted(tg), 'actions': [], 'blocked': []}
+for M in sorted(tg):
+    try:
+        vs = json.loads(subprocess.run(['python3', 'verify_source.py', M], capture_output=True, text=True, timeout=60).stdout.splitlines()[0]).get('verified')
+        impl = int(rpc('eth_getStorageAt', [M, IMPL_SLOT, 'latest']), 16)
+        bal = int(rpc('eth_getBalance', [M, 'latest']), 16)
+        owed = ci(M, '0x' + sel('refundOwed()')); price = ci(M, '0x' + sel('PRICE_PER_SHARE()'))
+    except Exception as ex: out['blocked'].append((M, 'read_err', str(ex)[:80])); continue
+    gate_ok = vs is True and impl == 0 and bal >= owed and price > 0
+    if not gate_ok: out['blocked'].append((M, 'gate', {'verified': vs, 'proxy': impl != 0, 'bal': bal / 1e18, 'owed': owed / 1e18}))
+    MAINA = next(a for a in A if a['label'] == '主')
+    for a in [MAINA] + [x for x in A if x is not MAINA]:
+        addr = a['bsc'].lower(); pad = addr[2:].rjust(64, '0')
+        # 领回：claimFree([]) 有到期仓位才发（先 eth_call 看是否 revert/有变化由 preview 决定）
+        try:
+            pq = call(M, '0x' + sel('pending(address)') + pad); n_free = int(pq[2:66], 16)  # 已到期可领的押金 BNB
+        except Exception: n_free = None
+        key = f'{M}|{a["label"]}'; e = st.get(key, {})
+        if n_free and time.time() >= e.get('next_claim', 0):
+            data = '0x' + sel('claimFree(uint256[])') + u(32) + u(0)
+            stc = go(a, M, data, value='0')
+            if stc[0] == 'dry_ok' and str(stc[1]) == '[]': stc = ('dry_empty', '')
+            out['actions'].append((M[:10], a['label'], 'claim', stc[0], str(stc[1])[:90]))
+            e['next_claim'] = time.time() + (1800 if stc[0] not in ('ok', 'dry_ok') else 3600)
+        # 挖：今日额度
+        if gate_ok:
+            try:
+                q = call(M, '0x' + sel('quota(address,uint256)') + pad + u(0))
+                w = [int(q[2 + 64 * i:66 + 64 * i], 16) for i in range(17)]
+                aLeft, opened, paused = w[3], w[15], w[16]
+                n = min(aLeft, CAP // price)
+                b = int(rpc('eth_getBalance', [a['bsc'], 'latest']), 16)
+                if opened and not paused and n > 0 and b - n * price - GAS >= KEEP:
+                    ref = '0' * 64 if a is MAINA else MAINA['bsc'][2:].lower().rjust(64, '0')
+                    stm = go(a, M, '0x' + sel('mintFree(uint256,address)') + u(n) + ref, value=str(n * price))
+                    out['actions'].append((M[:10], a['label'], 'mint', n, n * price / 1e18, stm[0], str(stm[1])[:90]))
+                elif n > 0 and b - n * price - GAS < KEEP:
+                    out['blocked'].append((M[:10], a['label'], 'low_bnb', b / 1e18))
+            except Exception as ex: out['blocked'].append((M[:10], a['label'], 'mint_err', str(ex)[:80]))
+        st[key] = e
+json.dump(st, open(ST, 'w')); json.dump(out, open(OUT, 'w'), ensure_ascii=False)
+if out['actions']: print(json.dumps(out, ensure_ascii=False))
