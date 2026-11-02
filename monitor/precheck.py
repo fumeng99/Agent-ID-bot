@@ -4,6 +4,7 @@
 解码 revert 原因（含自定义错误，如 SoldOut()），输出排序后的列表：
   mintable 有号能铸 → 本轮优先 preview/execute
   soldout  已售罄   → 写入 soldout.json，之后不再试
+  mixed_free 数量 1 要付费、数量 0 可领免费份（free_calldata）→ 交 mixedfree.py，只领免费份
   paid     要付费（WrongPayment 等）→ 不是免费 mint，按付费规则处理
   revert   其他原因 → 附错误名，交给人工/下轮
 用法：python3 precheck.py  （discover_all.sh 之后跑；输出 discover_out/precheck.json）
@@ -98,11 +99,23 @@ for c in items():
     reasons = sorted({v for v in per.values() if v != 'ok' and not str(v).startswith('skip_account') and not str(v).startswith('RPC 读取失败')})
     paid = any(k in r for r in reasons for k in ('WrongPayment', 'InsufficientPayment', 'IncorrectPayment', 'InvalidPayment', 'insufficient'))
     status = 'mintable' if oks else ('soldout' if any('SoldOut' in r or 'sold out' in r.lower() for r in reasons) else ('paid' if paid else ('unknown' if unk and not reasons else 'revert')))
+    # 2026-11-02 15:11 用户「前面免费 后面付费的也不打」：数量型 mint(1) 不行时，再试数量 0（BNBbaby 类 mint(0) = 只领每号免费份）。
+    # 能过的标 mixed_free + free_calldata，巡逻交给 mixedfree.py / mint_many.py（规则 B + preview 干净才发），付费部分仍只提醒。
+    free_data, mixed_ok = None, []
+    if status in ('paid', 'revert') and len(data) == 74 and data[10:] == '1'.rjust(64, '0'):
+        d0 = data[:10] + '0' * 64
+        for a in ACC:
+            _lab = a.get('label') or a['bsc'][:8]
+            if _lab in SKIP_ACC.get(t, {}): continue
+            st0, _w = call(a['bsc'], t, d0)
+            if st0 == 'ok': mixed_ok.append(_lab)
+        if mixed_ok: status, free_data = 'mixed_free', d0
     if status == 'soldout': sold[t] = {'name': c.get('name'), 'at': time.strftime('%Y-%m-%d %H:%M')}
     res.append({'name': c.get('name'), 'target': t, 'selector': sel, 'source': c.get('source', 'transfer_mint'), 'status': status, 'ok_accounts': oks,
-                'reasons': reasons, 'unknown_accounts': unk, 'bscscan': c.get('bscscan')})
+                'reasons': reasons, 'unknown_accounts': unk, 'bscscan': c.get('bscscan'),
+                **({'free_calldata': free_data, 'free_ok_accounts': mixed_ok} if free_data else {})})
 
-order = {'mintable': 0, 'not_checked': 1, 'unknown': 1, 'revert': 2, 'paid': 3, 'soldout': 4, 'skip_permanent': 5}
+order = {'mintable': 0, 'mixed_free': 0, 'not_checked': 1, 'unknown': 1, 'revert': 2, 'paid': 3, 'soldout': 4, 'skip_permanent': 5}
 res.sort(key=lambda r: order.get(r['status'], 9))
 json.dump(sold, open(SOLD, 'w'), ensure_ascii=False, indent=1)
 json.dump(errc, open(ERRCACHE, 'w'), ensure_ascii=False, indent=1)

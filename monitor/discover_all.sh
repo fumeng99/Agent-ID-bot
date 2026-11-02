@@ -23,6 +23,7 @@ run heatscan 100 $D/fairmint env FM_DEADLINE=90 python3 heatscan.py  # 2026-11-0
 run opencheck 90 $D python3 opencheck.py
 run approvals 60 $D python3 approvals_watch.py  # 2026-11-01 学  v0.4.1：授权巡检（只读 baw approvals list），新增授权→alerts，只提醒不撤销
 run claimscan 110 $D python3 claimscan.py 80  # 可领取奖励（只读）
+run mixedfree 110 $D env MF_BUDGET=95 python3 mixedfree.py --scan  # 2026-11-02 用户「前面免费 后面付费的也不打」：混合盘免费份（数量 0 / claimFree 等）只读探测，按上次检查时间轮转；领取由巡逻 --from-out --mint 做
 wait
 # 免费候选预检：依赖 chainscan 结果，所以放在 wait 之后
 ( s=$(date +%s); cd $D && timeout 100 python3 precheck.py > $O/precheck.json 2> $O/precheck.err; echo "precheck exit=$? 100s上限 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
