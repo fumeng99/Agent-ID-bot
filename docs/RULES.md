@@ -5,6 +5,17 @@ CLI：$AIDBOT_HOME/baw/node_modules/.bin/baw，运行前 export HOME=$AIDBOT_HOM
 Binance 官方技能文档：$AIDBOT_HOME/binance-skills-hub/skills/binance-web3/（binance-agentic-wallet、query-token-audit、query-token-info、meme-rush 等）
 contract-call calldata 编码示例：$AIDBOT_HOME/baw/enc.mjs（@noble/hashes keccak）
 
+
+
+## 押金全退型挖矿自动挖（用户 2026-11-03 01:56「要」+「这种为什么没监控到 自动打」）
+- 模板：字节码含 mintFree(uint256,address)+claimFree(uint256[])+quota(address,uint256)+refundOwed()+REFUND_DELAY()+PRICE_PER_SHARE()（AGC 0x6288…3743 类）。refundmine.py 由 discoverd 每约 60 秒拉起。
+- 每天自动 mintFree 当日剩余额度，每号每天押金 ≤0.02 BNB；邀请人填主号（主号不填）。闸门：源码已验证、非代理、合约 BNB ≥ refundOwed、open 且未暂停、扣后钱包 ≥0.003 BNB、preview 只扣押金。到期 pending>0 自动 claimFree（value=0，preview 只增）。领到的奖励币不自动卖，卖法等用户定。
+- 漏报原因：AGC 11-02 20:32 已被 chainscan 发现，但 value=0.01 BNB 被归为付费注册（paid_register）直接跳过；没识别出押金 24h 全退。
+
+## 付费提醒必须写全（用户 2026-11-03 01:53「付费为什么信息不详细」，最高优先级）
+- 任何付费项目提醒（含 sitescan paid_mints、fair mint 进度、「只提醒不买」项）不得只写名称+单价。每盘至少写：机制一句话（怎么铸、多少份、每份多少币）、源码验证/可升级/owner 权限（能否 withdraw、暂停、增发）、资金去向（国库%、进池%、LP 去向）、进度（已铸/总量，付费/免费份数）、池子与流动性（未开池写预计开池池子构成）、我们各号持仓、结论（买/不买及原因）、链接。
+- 付费合约先查免费份：有 quote(addr,n)/freeLeft/freeAvailable/FREE_PER_WALLET 等，quote==0 或首份免费的，按 0 元规则先给各号领（value=0、preview 干净），再报付费部分。2026-11-03 漏例：boltbook/Nvagent 0x4951…07b2 首份免费被当付费只提醒，01:55 已补领。
+
 ## 最高优先级·用户安全规则（2026-10-31 03:22，覆盖本文件其他条款）
 A. 免费 Mint 全自动：只自动铸造价格严格为 0、只耗 gas、无授权的项目（签名只限规则 C 的 EIP-712）。每个账号每笔都先 baw contract-call preview，干净（simulationCode 000000000、risks 全空、无 allowance/authority 变化、无代币/BNB 转出、只得 NFT/代币）才 execute；任何风险立即放弃并在消息里提醒用户。
 B. 源码必须公开：合约须在 Sourcify 或 BscScan 已验证源码（代理合约要查实现合约；用 verify_source.py 查，Sourcify 没有会自动查 BscScan/OKLink）；未公开源码，或项目方能直接提走用户资金的，直接跳过并在消息里告知用户（项目名、合约、原因）。「仅链上发现」的项目同样要过这一条。
