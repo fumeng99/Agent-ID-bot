@@ -124,18 +124,21 @@ for row in FM.get('watch_unopened', []):
     if not vs.get('verified'): out['skipped'].append((row['name'], a, row['open_pct'], '源码未验证')); continue
     tu = v.get('cost_1share_token_units'); per_u = tu if tu else (v.get('cost_1share_bnb') or 0) * BNBU
     NACC = len(json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json')))
-    each = per_u * 10  # 基础额度 10 份/号（fair_buy 按实际剩余额度买）
+    # 2026-11-03 02:39 用户「合成一条规则」：所有自动付费统一每号每项目 ≤30U（含 gas 余量 3%），每号每天合计 ≤100U
+    NSH = min(10, int(30 * 0.97 // per_u)) if per_u > 0 else 0
+    if NSH < 1: out['skipped'].append((row['name'], a, row['open_pct'], f'单份 {per_u:.2f}U 超过每号每项目 30U 上限')); continue
+    each = per_u * NSH
     accs = [l for l in LABELS if per_acc.get(l, 0) + each <= CAP]
     over = [l for l in LABELS if l not in accs]
-    if over: out['remind'].append(f"{row['name']} 已到 {row['open_pct']}%，每号打满约 {each:.0f}U，{'/'.join(over)} 今天会超 100U/号，未买")
+    if over: out['remind'].append(f"{row['name']} 已到 {row['open_pct']}%，每号约 {each:.0f}U（{NSH} 份，单项目 30U 封顶），{'/'.join(over)} 今天会超 100U/号，未买")
     if not accs: continue
     est = each * len(accs)
     if not DRY and not tu and v.get('cost_1share_bnb'):
-        out.setdefault('swaps', []).extend(topup_bnb(v['cost_1share_bnb'] * 10 + 0.0045, BNBU))
+        out.setdefault('swaps', []).extend(topup_bnb(v['cost_1share_bnb'] * NSH + 0.0045, BNBU))
     if BM.get('burnmix'):
-        res = subprocess.run(['python3', f'{D}/burnmix_buy.py', a, '--max-bnb', str(round((v.get('cost_1share_bnb') or 0.002) * 10 * 1.15 + 0.001, 4))] + (['--dry'] if DRY else []) + accs,
+        res = subprocess.run(['python3', f'{D}/burnmix_buy.py', a, '--max-bnb', str(round((v.get('cost_1share_bnb') or 0.002) * NSH * 1.15 + 0.001, 4))] + (['--dry'] if DRY else []) + accs,
                              capture_output=True, text=True, timeout=600).stdout
-    else: res = subprocess.run(['python3', f'{D}/fair_buy.py', a, ok.get('token') or v.get('token'), '10', '--max', str(round(per_u * 1.1, 4))] + (['--dry'] if DRY else []) + accs,
+    else: res = subprocess.run(['python3', f'{D}/fair_buy.py', a, ok.get('token') or v.get('token'), str(NSH), '--max', str(round(per_u * 1.1, 4))] + (['--dry'] if DRY else []) + accs,
                          capture_output=True, text=True, timeout=600).stdout
     lines = res.splitlines(); out['bought'].append({'name': row['name'], 'contract': a, 'open_pct': row['open_pct'], 'per_share_u': round(per_u, 3), 'result': lines})
     if any('insufficient' in l or 'low_bnb' in l for l in lines):
