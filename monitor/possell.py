@@ -222,11 +222,11 @@ def step(st, out):
                         keep = a['qty0'] * R['moonPct'] / 100
                         if b > keep * 1.02: act = ('回本后从高点回落 50%，卖到只留 20% 长抱', round(100 * (1 - keep / b), 2))
             else:
-                if time.time() - opened_at < R['freeWaitSec']: continue
-                if s['peak'] and px <= s['peak'] * (1 - R['freeDrop']): act = ('免费币从高点回落 40% 全卖', 100)
+                # 2026-11-04 03:22 用户原话「要」：免费领到的币一能卖（已开池、有报价）就立刻全卖，替代开池 3 分钟后回落 40% 规则
+                act = ('免费币一能卖立刻全卖', 100)
             if not act: sa.pop('hit', None); continue
             sa['hit'] = sa.get('hit', 0) + 1
-            if sa['hit'] < 2: continue  # 连续两次才算，防价格源跳动
+            if sa['hit'] < 2 and P['paid']: continue  # 连续两次才算，防价格源跳动（免费币立刻卖，不等）
             if False:  # 2026-11-01 19:46 用户原话「改」：手动确认买入的仓位也全天自动卖（原 A 规则手动仓白天只提醒）
                 key = act[0]
                 if sa.get('alerted') != key: sa['alerted'] = key; out['alerts'].append(f"{P['name']}｜{l}｜触发「{key}」（价值约 {v:.2f}U）｜手动仓位白天不自动卖，00:00 后仍满足会自动执行｜{q['url']}")
