@@ -116,7 +116,7 @@ def cmd_fast():
 
 def cmd_candidates():
     rows = []
-    for f in ('chainscan.json', 'regscan.json'):
+    for f in ('chainscan.json', 'regscan.json', 'usdtscan.json'):
         try: rows += [dict(c, _src=f.split('.')[0]) for c in json.load(open(os.path.join(O, f))).get('new_candidates', [])]
         except Exception: pass
     if not rows: print('本轮无新链上候选'); return

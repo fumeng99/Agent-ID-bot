@@ -575,3 +575,5 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - fastprogress：所有模板 ≥60% 且审计通过（jager=audit_ok，其他=audit_report）即拉起 autofill；非 jager 模板 ≥40% 就提前跑通用审计。fairmint.py 不再标 autofill_supported=False。
 - `python3 autofill.py --dry [--only 0x…]`：只预演，dry 时闸门失败也继续评估其余闸门，gates[合约] 给出每项结果、gates_failed、would_buy。
 - 备份 *.bak_1103unify。
+
+【2026-11-03 13:15 用户原话「领取了立马卖」】AGC 押金全退挖矿领回的奖励币，claimFree 确认后立刻 fast_sell 全卖成 USDT（refundmine.py 已内置，日志 discover_out/agc_sell.log）；押金 BNB 不动。已核对 agc() = 交易代币 0x63dea5ac…4ba6。

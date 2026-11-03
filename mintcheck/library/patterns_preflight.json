@@ -1,0 +1,306 @@
+{
+ "chain_id": 56,
+ "agent_id_registry": "0x60B9262456dE011F7d15A54CDD8c48BaAa8b022F",
+ "wbnb": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+ "proxy_slots": {
+  "eip1967_implementation": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+  "eip1967_beacon": "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50",
+  "eip1967_admin": "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
+ },
+ "eip1167_prefix": "363d3d373d3d3d363d73",
+ "dangerous_selectors": [
+  {
+   "selector": "0xa9059cbb",
+   "name": "transfer(address,uint256)"
+  },
+  {
+   "selector": "0x095ea7b3",
+   "name": "approve(address,uint256)"
+  },
+  {
+   "selector": "0x23b872dd",
+   "name": "transferFrom(address,address,uint256)"
+  },
+  {
+   "selector": "0xa22cb465",
+   "name": "setApprovalForAll(address,bool)"
+  }
+ ],
+ "mint_candidates": [
+  {
+   "selector": "0x1249c58b",
+   "name": "mint()",
+   "calldata": "0x1249c58b",
+   "payable_probe": true
+  },
+  {
+   "selector": "0x5b70ea9f",
+   "name": "freeMint()",
+   "calldata": "0x5b70ea9f",
+   "payable_probe": true
+  },
+  {
+   "selector": "0x4e71d92d",
+   "name": "claim()",
+   "calldata": "0x4e71d92d",
+   "payable_probe": true
+  },
+  {
+   "selector": "0xa0712d68",
+   "name": "mint(uint256)",
+   "calldata_template": "0xa0712d68{uint256}",
+   "default_args": [
+    1
+   ],
+   "payable_probe": true
+  },
+  {
+   "selector": "0x26092b83",
+   "name": "publicMint()",
+   "calldata": "0x26092b83",
+   "payable_probe": true
+  },
+  {
+   "selector": "0x74d04cfc",
+   "name": "commitFreeMint()",
+   "calldata": "0x74d04cfc",
+   "payable_probe": true
+  },
+  {
+   "selector": "0x9f92d0dd",
+   "name": "registerForRewards()",
+   "calldata": "0x9f92d0dd",
+   "payable_probe": true
+  },
+  {
+   "selector": "0x7c928fe9",
+   "name": "freeMint(uint256)",
+   "calldata_template": "0x7c928fe9{uint256}",
+   "default_args": [
+    1
+   ],
+   "payable_probe": true
+  },
+  {
+   "selector": "0x379607f5",
+   "name": "claim(uint256)",
+   "calldata_template": "0x379607f5{uint256}",
+   "default_args": [
+    1
+   ],
+   "payable_probe": true
+  },
+  {
+   "selector": "0x8ab53447",
+   "name": "mintFree()",
+   "calldata": "0x8ab53447",
+   "payable_probe": true
+  },
+  {
+   "selector": "0xf366afc9",
+   "name": "claimFree()",
+   "calldata": "0xf366afc9",
+   "payable_probe": true
+  },
+  {
+   "selector": "0x1be3587a",
+   "name": "agentMint()",
+   "calldata": "0x1be3587a",
+   "payable_probe": true
+  },
+  {
+   "selector": "0x6a627842",
+   "name": "mint(address)",
+   "calldata_template": "0x6a627842{address}",
+   "needs_wallet": true,
+   "payable_probe": true
+  },
+  {
+   "selector": "0x2db11544",
+   "name": "publicMint(uint256)",
+   "calldata_template": "0x2db11544{uint256}",
+   "default_args": [
+    1
+   ],
+   "payable_probe": true
+  },
+  {
+   "selector": "0x94bf804d",
+   "name": "mint(uint256,address)",
+   "calldata_template": "0x94bf804d{uint256}{address}",
+   "default_args": [
+    1
+   ],
+   "needs_wallet": true,
+   "payable_probe": true
+  }
+ ],
+ "view_probes": [
+  {
+   "selector": "0x6817c76c",
+   "name": "mintPrice()",
+   "kind": "price"
+  },
+  {
+   "selector": "0xa035b1fe",
+   "name": "price()",
+   "kind": "price"
+  },
+  {
+   "selector": "0x13faede6",
+   "name": "cost()",
+   "kind": "price"
+  },
+  {
+   "selector": "0x8d859f3e",
+   "name": "PRICE()",
+   "kind": "price"
+  },
+  {
+   "selector": "0xc002d23d",
+   "name": "MINT_PRICE()",
+   "kind": "price"
+  },
+  {
+   "selector": "0x13966db5",
+   "name": "mintFee()",
+   "kind": "price"
+  },
+  {
+   "selector": "0xef9089d6",
+   "name": "nextPrice()",
+   "kind": "price"
+  },
+  {
+   "selector": "0x5c975abb",
+   "name": "paused()",
+   "kind": "bool_open_invert"
+  },
+  {
+   "selector": "0xb187bd26",
+   "name": "isPaused()",
+   "kind": "bool_open_invert"
+  },
+  {
+   "selector": "0x68428a1b",
+   "name": "saleActive()",
+   "kind": "bool_open"
+  },
+  {
+   "selector": "0xbc8893b4",
+   "name": "publicSaleActive()",
+   "kind": "bool_open"
+  },
+  {
+   "selector": "0x24bbd049",
+   "name": "mintOpen()",
+   "kind": "bool_open"
+  },
+  {
+   "selector": "0xd1239730",
+   "name": "mintEnabled()",
+   "kind": "bool_open"
+  },
+  {
+   "selector": "0x18160ddd",
+   "name": "totalSupply()",
+   "kind": "supply"
+  },
+  {
+   "selector": "0xd5abeb01",
+   "name": "maxSupply()",
+   "kind": "max_supply"
+  },
+  {
+   "selector": "0x32cb6b0c",
+   "name": "MAX_SUPPLY()",
+   "kind": "max_supply"
+  },
+  {
+   "selector": "0xe8315742",
+   "name": "maxTokens()",
+   "kind": "max_supply"
+  },
+  {
+   "selector": "0x55234ec0",
+   "name": "remaining()",
+   "kind": "remaining"
+  },
+  {
+   "selector": "0x4f02c420",
+   "name": "minted()",
+   "kind": "minted"
+  },
+  {
+   "selector": "0x8da5cb5b",
+   "name": "owner()",
+   "kind": "address"
+  },
+  {
+   "selector": "0x70a08231",
+   "name": "balanceOf(address)",
+   "kind": "balance",
+   "needs_wallet": true
+  },
+  {
+   "selector": "0xc2ba4744",
+   "name": "canMint(address)",
+   "kind": "bool_elig",
+   "needs_wallet": true
+  },
+  {
+   "selector": "0x5c60da1b",
+   "name": "implementation()",
+   "kind": "address"
+  },
+  {
+   "selector": "0x06fdde03",
+   "name": "name()",
+   "kind": "string"
+  },
+  {
+   "selector": "0x95d89b41",
+   "name": "symbol()",
+   "kind": "string"
+  },
+  {
+   "selector": "0x313ce567",
+   "name": "decimals()",
+   "kind": "uint"
+  },
+  {
+   "selector": "0x453c2310",
+   "name": "maxPerWallet()",
+   "kind": "limit"
+  },
+  {
+   "selector": "0xb228d925",
+   "name": "maxMintPerWallet()",
+   "kind": "limit"
+  },
+  {
+   "selector": "0x0f2cdd6c",
+   "name": "MAX_PER_WALLET()",
+   "kind": "limit"
+  },
+  {
+   "selector": "0x639814e0",
+   "name": "maxPerAddress()",
+   "kind": "limit"
+  },
+  {
+   "selector": "0xf968adbe",
+   "name": "maxPerTx()",
+   "kind": "limit"
+  }
+ ],
+ "near_free_wei": [
+  0,
+  100000000000000,
+  220000000000000,
+  300000000000000,
+  500000000000000,
+  1000000000000000
+ ],
+ "default_rpc": "https://bsc-dataseed.binance.org"
+}

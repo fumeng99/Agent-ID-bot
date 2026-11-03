@@ -3,7 +3,7 @@
 模板识别（字节码同时含）：mintFree(uint256,address)、claimFree(uint256[])、quota(address,uint256)、refundOwed()、REFUND_DELAY()、PRICE_PER_SHARE()。
 闸门（每次都查，任何一项不过就不挖，只领回）：源码已验证（verify_source，含指纹）；非代理（EIP-1967 实现槽为空）；合约 BNB 余额 ≥ refundOwed（押金全额可退）；
 quota.open 且未暂停；每号每天押金 ≤ 0.02 BNB；扣押金和 gas 后钱包仍 ≥ 0.003 BNB；每号 preview 干净（只扣押金）才 execute；unknown 不重发。
-领回：claimFree([]) value=0，有到期仓位才发，preview 干净才 execute（只增 BNB 和代币）。不卖出。
+领回：claimFree([]) value=0，有到期仓位才发，preview 干净才 execute（只增 BNB 和代币）。领回成功后立刻全卖奖励币（用户 11-03 13:15「领取了立马卖」）。
 目标：refundmine_targets.json 手动列表 + fairmint/found.json / chainscan/candidates.json / discover_out/newtpl.json(refundmine_candidates) 中自动识别出的合约。discoverd 每轮约 60 秒拉起（flock）。
 usage: refundmine.py [--dry] [合约...]"""
 import sys, os, json, time
@@ -61,6 +61,15 @@ for M in sorted(tg):
             if stc[0] == 'dry_ok' and str(stc[1]) == '[]': stc = ('dry_empty', '')
             out['actions'].append((M[:10], a['label'], 'claim', stc[0], str(stc[1])[:90]))
             e['next_claim'] = time.time() + (1800 if stc[0] not in ('ok', 'dry_ok') else 3600)
+            # 2026-11-03 13:15 用户原话「领取了立马卖」：领回确认（ok）后立刻把该号奖励币全部卖成 USDT（fast_sell：先 quote 预演、滑点 ≤8%、失败不下单），押金 BNB 不动
+            if stc[0] == 'ok' and not DRY:
+                try:
+                    tok = '0x' + call(M, '0x' + sel('agc()'))[-40:]
+                    lf = open('discover_out/agc_sell.log', 'a'); lf.write(time.strftime('%m-%d %H:%M:%S ', time.gmtime(time.time() + 8 * 3600)) + f'claim ok {a["label"]} -> sell {tok}\n'); lf.flush()
+                    time.sleep(6)
+                    subprocess.Popen(['python3', 'fast_sell.py', tok, '100', '--slip', '8', a['label']], stdout=lf, stderr=lf, cwd=D)
+                    out['actions'].append((M[:10], a['label'], 'sell_spawned', tok))
+                except Exception as ex: out['blocked'].append((M[:10], a['label'], 'sell_err', str(ex)[:80]))
         # 挖：今日额度
         if gate_ok:
             try:

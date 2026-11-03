@@ -15,6 +15,7 @@ run() { # name timeout dir cmd...
 }
 run chainscan 200 $D/chainscan env SCAN_BUDGET=60 python3 scan.py
 run regscan 110 $D/chainscan env REG_DEADLINE=95 python3 regscan.py  # 免费登记/领取（无 Transfer 事件，如 BossFreeRegister register()），候选同样并入 candidates.json
+run usdtscan 110 $D/chainscan env USDT_DEADLINE=95 python3 usdtscan.py  # 2026-11-03 FLY 漏发现后补：USDT 付款的 Agent ID 销售盘（BNB value=0、无 Transfer(from=0)），只出简报
 run sitescan 110 $D python3 sitescan.py
 run tg 90 $D python3 tg/tgcall.py agentidcall dashutiaozi
 run platforms 90 $D python3 platforms/platforms.py

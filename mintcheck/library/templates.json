@@ -1,0 +1,32 @@
+{
+ "636ce8d026087a2c75d8cd18667343714ae0439ccfe54842e05b8c908ac134f8": {
+  "name": "agc-refund-mine",
+  "example": "0x6288dfe86f22b53eeb6886ae2d78941de7483743",
+  "note": "押 0.002 BNB/份，24h 后 claimFree 全退 + 奖励币",
+  "at_cst": "2026-11-03 18:24"
+ },
+ "4e17bb914c89fae2fe2d04714d12ddf1767eade613898c69484a424d26caf801": {
+  "name": "fly-usdt-round-sale",
+  "example": "0x08adcd7912c12cf4c755a96512e06817f2bb2bb5",
+  "note": "第3轮 buy(uint256) USDT 付款，50% 进 fundWallet 超国库 30% 上限",
+  "at_cst": "2026-11-03 18:24"
+ },
+ "ba93df35dc77fb82d3c49f051133f5de6069ec544d7324c2efaab374baa34410": {
+  "name": "bbf-burn-proof-mint",
+  "example": "0x95115e644c87df8ba170393de232402c60005fe4",
+  "note": "mint(Claim[],maxTickets) 0.01 USDT/票，需链下 burn Merkle 证明，进度低",
+  "at_cst": "2026-11-03 18:24"
+ },
+ "cf8b2908d55e344503addb3b70bb9088e91b73d135ef26d776a133f917a62a41": {
+  "name": "bnbfarm-blindbox",
+  "example": "0xd64cc60b49d91fcb3d671be7131b4ae6642d7a10",
+  "note": "mint(count,maxBnb) 付费盲盒，进度 <60%",
+  "at_cst": "2026-11-03 18:24"
+ },
+ "ea33c7e2738f4ed184bd6c093da875a9bcede37f6eba306f2b9d7fd389b5baf0": {
+  "name": "claimgift-free",
+  "example": "0x858e78d395c9075dfa763f85e1e55671eff68d2b",
+  "note": "开售后六号 claimGift value=0 全部 status=1",
+  "at_cst": "2026-11-03 18:24"
+ }
+}
