@@ -11,7 +11,8 @@ def opt(k, d):
     return args[args.index(k) + 1] if k in args else d
 SLIP = str(min(float(opt('--slip', '8')), 15))  # D：滑点上限 15%
 GAS = opt('--gas', 'HIGH')
-pos = [x for i, x in enumerate(args) if not x.startswith('--') and (i == 0 or args[i-1] not in ('--slip', '--gas'))]
+PX = float(opt('--px', '0') or 0)  # 2026-11-04：possell 估算价；quote 实价 < 估算 50% 不下单（BNBbaby 价格源错误误卖）
+pos = [x for i, x in enumerate(args) if not x.startswith('--') and (i == 0 or args[i-1] not in ('--slip', '--gas', '--px'))]
 T = pos[0]; PCT = float(pos[1]) if len(pos) > 1 and pos[1].replace('.', '').isdigit() else 100.0
 only = [x for x in pos[1:] if not x.replace('.', '').isdigit()]
 acc = [a for a in A if not only or a['label'] in only]
@@ -41,6 +42,11 @@ def one(a, b):
         if qerr is not None:
             net = any(k in qerr.lower() for k in ('timeout', 'timed out', 'econn', 'network', '429', 'too many', '502', '503', '504', 'socket', 'fetch failed'))
             return a['label'], {'qty': qty, 'error': ('quote_unknown 报价读取失败（已重试 3 次），未下单：' if net else 'quote 预演失败，未下单：') + qerr}
+        if PX:
+            try:
+                got = float(json.loads(qr.stdout)['data'].get('toCoinAmount') or 0); qpx = got / float(qty)
+                if qpx < PX * 0.5: return a['label'], {'qty': qty, 'error': f'quote_mismatch 报价 {got:.4g}U，仅为估算的 {qpx / PX * 100:.1f}%，未下单'}
+            except Exception: pass
     cmd = [B, 'market-order', 'quote' if DRY else 'swap', '--binanceChainId', '56', '--fromTokenQty', qty, '--fromToken', T, '--toToken', U, '--slippage', SLIP, '--json']
     if not DRY: cmd[-1:-1] = ['--gasLevel', GAS]
     r = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=150)

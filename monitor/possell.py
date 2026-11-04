@@ -59,13 +59,18 @@ def chain_prices(pairs):
         try:
             rv, dc = res[i], int(res[3 * n + i] or '0x12', 16)
             t0 = (res[n + i] or '')[-40:].lower(); t1 = (res[2 * n + i] or '')[-40:].lower()
-            if not t0 and t1: t0 = t[2:] if t1 == W else (W if t1 == t[2:] else '')
-            if not t1 and t0: t1 = W if t0 == t[2:] else (t[2:] if t0 == W else '')
-            if W not in (t0, t1) or t[2:] not in (t0, t1): continue
+            # 2026-11-04 20:5x 修：原来 token0/token1 读失败时「猜」另一边是 WBNB，BNBbaby 的 USDT 池被当成 WBNB 池，价格虚高约 BNB 价倍（x=81 实际约 0.1），误触发 10/20 倍卖出。现在两边都读到才算，且支持 USDT 池
+            if not t0 or not t1: continue
+            US = '55d398326f99059ff775485246999027b3197955'
+            if t[2:] not in (t0, t1): continue
+            qt = t1 if t0 == t[2:] else t0
+            if qt == W: qm = bu
+            elif qt == US: qm = 1.0
+            else: continue
             r0, r1 = int(rv[2:66], 16), int(rv[66:130], 16)
             rt, rw = (r0, r1) if t0 == t[2:] else (r1, r0)
-            liq = 2 * rw / 1e18 * bu
-            if rt and liq >= 50: out[t] = {'px': rw / 1e18 / (rt / 10 ** dc) * bu, 'liq': liq, 'url': f'https://dexscreener.com/bsc/{pairs[t]}', 'created': 0, 'pair': pairs[t], 'src': 'chain'}
+            liq = 2 * rw / 1e18 * qm
+            if rt and liq >= 50: out[t] = {'px': rw / 1e18 / (rt / 10 ** dc) * qm, 'liq': liq, 'url': f'https://dexscreener.com/bsc/{pairs[t]}', 'created': 0, 'pair': pairs[t], 'src': 'chain'}
         except Exception: pass
     return out
 
@@ -145,9 +150,9 @@ def positions():
     return pos
 
 
-def sell(t, pct, labels, slip='8'):
+def sell(t, pct, labels, slip='8', px=None):
     if DRY: return {l: {'dry': pct} for l in labels}
-    r = subprocess.run(['python3', f'{D}/fast_sell.py', t, str(round(pct, 2)), '--slip', slip] + labels, capture_output=True, text=True, timeout=240)
+    r = subprocess.run(['python3', f'{D}/fast_sell.py', t, str(round(pct, 2)), '--slip', slip] + (['--px', repr(px)] if px else []) + labels, capture_output=True, text=True, timeout=240)
     try: return json.loads(r.stdout.splitlines()[0])['orders']
     except Exception: return {l: {'error': (r.stdout + r.stderr)[-200:]} for l in labels}
 
@@ -204,7 +209,7 @@ def step(st, out):
             if sa.get('next', 0) > time.time(): continue
             act = None
             if P['paid']:
-                if not a.get('qty0') or not a.get('cost_bnb') or not bu: continue
+                if not a.get('qty0') or not (a.get('cost_u') or (a.get('cost_bnb') and bu)): continue
                 entry_u = a['cost_u'] / a['qty0'] if a.get('cost_u') else a['cost_bnb'] * bu / a['qty0']
                 x = px / entry_u; sa['x'] = round(x, 2)
                 for n in R['notifyX'] + R['moonNotify']:
@@ -237,14 +242,14 @@ def step(st, out):
         for (kind, pct, slip), ls in acts.items():
             sell_u = sum(v for _, v in ls) * pct / 100; side = (q.get('liq') or 0) / 2
             if side and sell_u > side * R['impact']:  # D：一次卖冲击太大 → 分两笔
-                p1 = pct / 2; res = sell(t, p1, [l for l, _ in ls], slip); time.sleep(15)
+                p1 = pct / 2; res = sell(t, p1, [l for l, _ in ls], slip, px); time.sleep(15)
                 ok = [l for l, _ in ls if isinstance(res.get(l), dict) and 'orderId' in res[l]]
                 if ok:
-                    r2 = sell(t, round((pct - p1) / (100 - p1) * 100, 2) if p1 < 100 else 100, ok, slip)
+                    r2 = sell(t, round((pct - p1) / (100 - p1) * 100, 2) if p1 < 100 else 100, ok, slip, px)
                     for l in ok:
                         if not (isinstance(r2.get(l), dict) and 'orderId' in r2[l]): out['errors'].append(f"{P['name']}｜{l}｜{kind} 第二笔失败（第一笔已成交 {res[l].get('orderId')}），不重发，下轮按价格重判：{str(r2.get(l))[:100]}")
             else:
-                res = sell(t, pct, [l for l, _ in ls], slip)
+                res = sell(t, pct, [l for l, _ in ls], slip, px)
             for l, v in ls:
                 r = res.get(l) or {}; sa = s['acc'][l]
                 if isinstance(r, dict) and ('orderId' in r or 'dry' in r) or r == 'no_balance':
@@ -255,6 +260,10 @@ def step(st, out):
                     elif '长抱' in kind: sa['moon'] = True
                     else: sa['done'] = True
                     out['sold'].append({'name': P['name'], 'token': t, 'acc': l, 'why': kind, 'pct': pct, 'value_u': round(v * pct / 100, 2), 'order': r.get('orderId') if isinstance(r, dict) else r, 'url': q['url']})
+                elif isinstance(r, dict) and 'quote_mismatch' in str(r.get('error', '')):
+                    # 2026-11-04：实际报价远低于估算价 = 价格源错或池子太浅，不卖、不推进阶段、10 分钟后重判，并提醒一次
+                    sa['next'] = time.time() + 600; sa['last_err'] = str(r)[:200]; sa.pop('hit', None)
+                    if sa.get('mm_alerted') != kind: sa['mm_alerted'] = kind; out['alerts'].append(f"{P['name']}｜{l}｜{kind}：实际报价远低于估算（{str(r.get('error'))[:80]}），未卖，10 分钟后重判｜{q['url']}")
                 elif isinstance(r, dict) and 'quote_unknown' in str(r.get('error', '')):
                     # 2026-11-02：报价读失败（网络/限流）≠ 卖不掉：不计失败次数、不放弃，60 秒后重试
                     sa['next'] = time.time() + 60; sa['last_err'] = str(r)[:200]; out.setdefault('unknown', []).append(f"{P['name']}｜{l}｜{kind}：报价读取失败，60 秒后重试")
