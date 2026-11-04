@@ -595,3 +595,11 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 用户要求：扫 GANG、Flap、TagAI（及 Four.meme Agent ID 专区）内盘阶段的 Agent ID Token，不限币安 Agent 指定；每个合约用 Clawby 交易信号源（app.openclawby.com/signals）复核，只推最值得参与的；免费的自动 mint（沿用原 0 元规则），付费只推简报等口令；无达标保持安静。
 - 脚本 platforms/agentid_scan.py（只读）：Four pulse（未迁移）、gang.fun/api/tokens（未毕业，new+trending）、bsc-api.tagai.fun/community/catalogPage?source=agent（TagAI Agent 目录，含 GANG/Flap/Four 导入）；信号用 analyze-api.openclawby.com/api/signals/feed?market=meme（公开、无 key，含 BSC 内盘币）。api.openclawby.com relay 免费档 5 次/分钟，11-05 00:50 已被封禁，脚本不调用。
 - 评级：Clawby 看空 / 税 >10% / 开发者卖出过半 / 已上外盘 → 避开；无官网或官方 X → 最多观望；有官源且（Clawby 看多 ≥60% 或内盘进度 ≥20% 或 ≥100 持有人）→ 可参与。巡逻 2c+ 步只推 new_picks（每合约一次）。
+
+## 用户的 Agent ID 内盘币 / NFT 审查清单（2026-11-05 00:58 原话整理，所有简报与自动执行都按此）
+一、项目本身：身份门槛（是否只对 Agent ID 开放、名额、抢的人数）；成本结构（真免费还是先免费后收费，如 SEEDS 浇水只前三次免费；有无隐藏 approve 或付费步骤）；代币规则（总量、分配、锁仓、解锁时间如 NOTHUMAN 开池后再锁 24h、何时开池）；发射平台（GANG/Flap/TagAI 内盘规则不同，看开池条件和募资去向）；热度（Clawby 信号与评估、X 讨论真实度、参与地址数）。
+二、链上必查：Sourcify 源码完全一致（partial 或无源码降级）；owner 权限（mint、暂停、改税、黑名单、提走池子资金）；付费 BNB 去向（BAO 式直接进 owner 且无建池代码 = 跑路风险，避开）；baw preview 看实际资产变化、多余 approve、改授权；部署地址历史合约与跑路记录。
+三、红线：不签看不懂的签名，尤其 Permit 和无限 approve；不走非官方链接；不信私信空投、不连陌生 dApp；付费和高风险只出简报，用户点头才参与；预演与风险拦截不可省，预演通过后执行一步到位。
+- 用户说的 Clawby 隔离钱包、YOLO、自动归集是他给 Clawby 的设置；我们这边用的是 baw 六个号，没有自动归集，任何转账仍需用户确认。
+四、简报格式：是什么、怎么参与；1–3 个亮点；链上事实；评级（可参与/观望/避开）；建议观察价位或参与方式。
+- 实现：agentid_scan.py 对「可参与」候选再查 Sourcify，非完全一致降观望。
