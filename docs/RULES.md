@@ -585,3 +585,8 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 用户原话「这种需要告诉我 让我判断」（BNB Burn Forge 0x9511…5FE4 于 11-03 20:34 被 newtpl 识别，30 分钟 34 钱包，因两条误判静默 reject 没报）。
 - newtpl_report.py：newtpl 识别、30 分钟 ≥30 钱包、不会自动执行（付费/未知/review/reject）的合约，每合约报一次，巡逻 2f 步写「🧐待你判断」简报。只报不交易。旧事件 267 个已作基线不再补报。
 - 误判修复：onlyToken/onlyController 等合约间调用限制不算项目方特权；名字含 BPS 的税率读数按万分比（TAX_BPS=100 = 1%）；库函数 `X.collect(msg.sender, …)` 收 USDT 算 ERC20 付费（BBF 现判 paid_mint）。备份 newtpl.py.bak_1105。
+
+## 开售定时提速与漏领修复（2026-11-05，用户「按照你推荐来」）
+- 漏领根因：salearm 只在开售前 90 秒内拉起 fire，但自身约 60 秒一轮、单轮最长 110 秒，11-04 的 0x5843/0x539b/0xac79/0xa178 全错过窗口被标 expired。00:47 手动补领前三个，六号各 1 份 18/18 已确认到账；0xa178 现已不可领。
+- 改：提前 15 分钟拉起 fire（睡到开售前 1 秒）；错过开售 6 小时内仍补拉；六号并发 eth_call 探测（0.3 秒一轮）；mint_many 执行前余额读数与 execute 并行，开售模式不再每笔 sleep 2 秒。安全闸门（源码验证、preview 干净才 execute）不变。
+- 不采纳 Clawby 预埋 preview：未开售时 preview 模拟必然 revert，过不了 simulationCode=000000000 闸门；YOLO 只省人工确认，我们本来就没有。备份 salearm.py.bak_1105、mint_many.py.bak_1105。

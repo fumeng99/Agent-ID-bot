@@ -35,11 +35,15 @@ for a in accts:
         and not d['risks'].get('riskDetails') and not d['risks'].get('riskBehaviors') and not any(d['risks'].get('addresses',{}).values() if d['risks'].get('addresses') else [])
         and all(x.get('change',0)>0 for x in bc) and bc)
     if not ok: out.append((a['label'],'unclean',json.dumps(sr)[:300])); continue
-    b0=bal_of(C,a['bsc'])
+    # 2026-11-05 提速：执行前余额读数与 execute 并行（原来先读余额再发，开售时多等一次 RPC）
+    from concurrent.futures import ThreadPoolExecutor as _TP
+    _ex=_TP(1); _fb=_ex.submit(bal_of,C,a['bsc'])
     e=run(['contract-call','execute','--requestId',d['requestId']])
+    try: b0=_fb.result(timeout=15)
+    except Exception: b0=None
     tx=(e.get('data') or {}).get('txHash') if isinstance(e,dict) else None
     if not tx: out.append((a['label'],'execute_fail',json.dumps(e)[:300])); continue
     c=confirm_tx(tx,C,a['bsc'],b0)
     out.append((a['label'],c['state'],tx,c.get('detail','')))
-    time.sleep(2)
+    if os.environ.get('MM_FAST')!='1': time.sleep(2)
 for o in out: print(o)

@@ -19,6 +19,7 @@ from rpcpool import rpc
 from codeutil import sel
 
 PLAN = 'salearm_plan.json'; EV = 'discover_out/salearm_events.jsonl'
+EARLY_SPAWN = 900; LATE_FIRE = 6 * 3600
 ACCTS = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
 BAD = re.compile(r'fee|withdraw|owner|refund|admin|set|pause|rescue|sweep|transfer|approve|burn|pull|pay|sell|redeem|snapshot|upgrade|renounce|init', re.I)
 GOOD = re.compile(r'free|gift|claim|airdrop|mint', re.I)
@@ -86,21 +87,24 @@ def build(a, abi):
 
 def fire(a, frees, start):
     while time.time() < start - 1: time.sleep(0.2)
-    done = set(); t_end = start + 180
+    done = set(); t_end = max(start, time.time()) + 180
     ev({'contract': a, 'stage': 'armed_fire', 'start': start})
     procs = []
     while time.time() < t_end and len(done) < len(ACCTS):
-        for ac in ACCTS:
-            if ac['label'] in done: continue
+        def probe(ac):   # 2026-11-05：六号并发试，不再一个个排队
             for name, cd in frees:
                 try:
-                    rpc('eth_call', [{'from': ac['bsc'], 'to': a, 'data': cd, 'value': '0x0'}, 'latest'])
-                except Exception:
-                    continue
-                done.add(ac['label'])
-                procs.append((ac['label'], name, subprocess.Popen(['python3', 'mint_many.py', a, cd, ac['label']], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)))
-                break
-        time.sleep(0.4)
+                    rpc('eth_call', [{'from': ac['bsc'], 'to': a, 'data': cd, 'value': '0x0'}, 'latest']); return ac, name, cd
+                except Exception: continue
+            return None
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(6) as ex:
+            hits = [h for h in ex.map(probe, [ac for ac in ACCTS if ac['label'] not in done]) if h]
+        for ac, name, cd in hits:
+            done.add(ac['label'])
+            procs.append((ac['label'], name, subprocess.Popen(['python3', 'mint_many.py', a, cd, ac['label']], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                                              env=dict(os.environ, MM_FAST='1'))))
+        time.sleep(0.3)
     for lab, name, p in procs:
         try: out = p.communicate(timeout=300)[0]
         except Exception as e: out = f'超时 {e}'
@@ -141,7 +145,7 @@ def main():
         save_plan(plan)
         p = plan.get(a)
         if not (p and p.get('start')) and time.time() - t0 > 80: continue
-        if p and p.get('spawned_at') and not p.get('alive_ok') and p.get('start', 0) > time.time() - 60:
+        if p and p.get('spawned_at') and not p.get('alive_ok') and p.get('start', 0) > time.time() - LATE_FIRE:
             # 看门狗：拉起 30 秒还没 fire_alive 就重拉（最多 2 次）
             try: alive = any(f'"{a}"' in l and 'fire_alive' in l for l in open(EV).readlines()[-400:])
             except Exception: alive = False
@@ -164,9 +168,12 @@ def main():
             plan[a] = {'start': t, 'frees': frees, 'start_cst': time.strftime('%m-%d %H:%M:%S', time.gmtime(t + 8 * 3600))}
             ev({'contract': a, 'stage': 'planned', 'start_cst': plan[a]['start_cst'], 'frees': [f[0] for f in frees]})
         p = plan[a]
-        if p['start'] < time.time() - 120:
+        # 2026-11-05 修：原来只在开售前 90 秒内拉起，而本脚本约 60 秒一轮、单轮最长 110 秒（flock -n 忙就跳过），
+        # 11-04 四个盘（0x5843/0x539b/0xac79/0xa178）全部错过窗口被标 expired、一笔没领。
+        # 改为提前 15 分钟拉起（fire 自己睡到开售前 1 秒）；错过开售 6 小时内仍补拉一次（免费份常常还在）。
+        if p['start'] < time.time() - LATE_FIRE:
             p['fired'] = 'expired'; continue
-        if p['start'] - time.time() <= 90:
+        if p['start'] - time.time() <= EARLY_SPAWN:
             p['fired'] = now_cst(); p['spawned_at'] = time.time()
             arg = json.dumps({'start': p['start'], 'frees': p['frees']})
             log = open(os.path.join(D, 'discover_out/salearm.log'), 'a')
