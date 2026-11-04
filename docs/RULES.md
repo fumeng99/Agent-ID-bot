@@ -1,3 +1,10 @@
+【汇报项目必写三项·用户 2026-11-05 02:59 原话「下次告诉我 有多少分什么进度 官方链接是多少」·所有巡逻/进度/简报任务通用】
+凡在消息里提到一个付费/fair mint 项目（含「源码未验证不买」「进度读不出」这类一句话提醒），同一行必须写：
+1) 份数：已铸 X / 开池份数 Y（或总份数），单价 BNB 与 U；
+2) 进度：X/Y 的 %，以及最近速度 %/分钟（读不到写「速度读不到」）；
+3) 官方链接：web_search「合约地址」与「项目名 + fair mint / Agent ID」，只有官网页面上写着这个合约地址（或代币地址）才算官方链接；找不到或对不上写「官网未找到（未确认）」，绝不拿同名其他项目的网站充数。找到的写进 fairmint/found.json 该合约的 site 字段，并加进 watch_sites.txt。
+链接按排版规则放消息末尾：「项目 官网 https://…」「项目 合约 https://bscscan.com/address/…」。
+
 # 链上打新与投研 Agent 规则（用户 2026-10-30 15:28 CST 原话授权）
 
 钱包：Binance Agentic Wallet，Agent ID <main>.ai，BSC 地址 <MAIN_ADDR>
@@ -603,3 +610,12 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 用户说的 Clawby 隔离钱包、YOLO、自动归集是他给 Clawby 的设置；我们这边用的是 baw 六个号，没有自动归集，任何转账仍需用户确认。
 四、简报格式：是什么、怎么参与；1–3 个亮点；链上事实；评级（可参与/观望/避开）；建议观察价位或参与方式。
 - 实现：agentid_scan.py 对「可参与」候选再查 Sourcify，非完全一致降观望。
+
+【2026-11-05 02:37 用户原话「后续每天打满 a和b」】AGC 0x6288…3743：refundmine.py 每轮 A 档按 aLeft 打满（取消 CAP 0.02），并新增 B 档 mintPool(nb, ref=主号, minAgcOut=报价90%)，nb=min(bLeft, 余额-留0.003-gas)/0.002；B 奖励现价报价 <2 倍成本则跳过并记 b_low_reward。仅限该合约。额度按 UTC 日（北京 08:00 重置）。备份 refundmine.py.bak_1105b。
+
+【2026-11-05 会话同时掉线 · 用户「彻底解决这个问题」】
+- 事实：11-05 02:30–02:33 CST 六个号同时 SESSION_EXPIRED。六号登录时间不同（10-30、11-01、11-04 00:30），不是 48h 硬顶或不活动掉线；判断为币安服务端统一强制登出（11-02 官方：Agentic Wallet 安全升级，风控定期扫描、触发规则强制登出），推断，未获官方确认。
+- 会话看门狗 session_watch.py（discoverd 约 10 分钟拉起，只读）：discover_out/session_watch.json 记录每号 sessionExpireTime / inactiveSignOutTime / maxSigninDuration / hours_left；expiring（6 小时内到期）非空时，巡逻在「⚠️ 需处理」提醒「X 号约 N 小时后掉线，方便时回复『扫码』提前重登」，每号每次到期只提醒一次。maxSigninDuration 不是最长档的号提醒用户在 App 里调到最长。
+- 重登流程：safe_session.sh signin 发码后，立刻后台跑 $AIDBOT_HOME/baw/relogin_wait.sh <目录>（等扫码→verify→马上补跑 refundmine），用户不必回「扫好了」。同一时间只发一个号的码，不并发 signin（新码会作废旧码）。
+- 不在其他设备/平台登录这六个 Agentic 钱包（一个钱包只认一个会话，新登录会踢掉这里）。
+- 2026-11-05 Clawby 1.0.70→1.0.72（42space Blitz/PIN 提示，与信号接口无关）

@@ -76,7 +76,7 @@ for M in sorted(tg):
                 q = call(M, '0x' + sel('quota(address,uint256)') + pad + u(0))
                 w = [int(q[2 + 64 * i:66 + 64 * i], 16) for i in range(17)]
                 aLeft, opened, paused = w[3], w[15], w[16]
-                n = min(aLeft, CAP // price)
+                n = aLeft  # 2026-11-05 02:37 用户「后续每天打满 a和b」：A 档按当日额度打满，取消 0.02 BNB/号/天上限
                 b = int(rpc('eth_getBalance', [a['bsc'], 'latest']), 16)
                 if opened and not paused and n > 0 and b - n * price - GAS >= KEEP:
                     ref = '0' * 64 if a is MAINA else MAINA['bsc'][2:].lower().rjust(64, '0')
@@ -85,6 +85,26 @@ for M in sorted(tg):
                 elif n > 0 and b - n * price - GAS < KEEP:
                     out['blocked'].append((M[:10], a['label'], 'low_bnb', b / 1e18))
             except Exception as ex: out['blocked'].append((M[:10], a['label'], 'mint_err', str(ex)[:80]))
+            # B 档（mintPool，不退押金）：2026-11-05 02:37 用户「后续每天打满 a和b」。只限 AGC 合约；奖励按现价报价 ≥2 倍成本才打（较窄读法，防阶段减半后亏）
+            if M == '0x6288dfe86f22b53eeb6886ae2d78941de7483743':
+                try:
+                    bLeft = w[6]; bRew = w[9]
+                    b = int(rpc('eth_getBalance', [a['bsc'], 'latest']), 16)
+                    nb = min(bLeft, max(0, (b - GAS * 10 - KEEP) // price))
+                    if opened and not paused and nb > 0:
+                        RT = '0x10ED43C718714eb63d5aA57B78B54704E256024E'; WB = 'bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c'; TK = '63dea5acdbe1f27c968907d08610a5f0a0284ba6'
+                        gao = '0x' + sel('getAmountsOut(uint256,address[])')
+                        rv = int(call(RT, gao + u(bRew * nb) + u(64) + u(2) + TK.rjust(64, '0') + WB.rjust(64, '0'))[-64:], 16)
+                        if rv < 2 * nb * price:
+                            out['blocked'].append((M[:10], a['label'], 'b_low_reward', rv / 1e18, nb * price / 1e18))
+                        else:
+                            mo = int(call(RT, gao + u(nb * price // 2) + u(64) + u(2) + WB.rjust(64, '0') + TK.rjust(64, '0'))[-64:], 16) * 90 // 100
+                            ref = '0' * 64 if a is MAINA else MAINA['bsc'][2:].lower().rjust(64, '0')
+                            stb = go(a, M, '0x' + sel('mintPool(uint256,address,uint256)') + u(nb) + ref + u(mo), value=str(nb * price))
+                            out['actions'].append((M[:10], a['label'], 'mintPool_B', nb, nb * price / 1e18, stb[0], str(stb[1])[:90]))
+                    elif bLeft > 0 and nb < bLeft:
+                        out['blocked'].append((M[:10], a['label'], 'b_low_bnb', b / 1e18, bLeft))
+                except Exception as ex: out['blocked'].append((M[:10], a['label'], 'b_err', str(ex)[:80]))
         st[key] = e
 json.dump(st, open(ST, 'w')); json.dump(out, open(OUT, 'w'), ensure_ascii=False)
 if out['actions']: print(json.dumps(out, ensure_ascii=False))

@@ -490,6 +490,7 @@ def reconcile(hours=2.0):
 
 
 # ---------------- 常驻 ----------------
+SW_LAST = [0.0]
 NEWTPL_LAST = [0.0]
 def daemon():
     lk = open(STATE + '.daemon.lock', 'w')
@@ -533,6 +534,12 @@ def daemon():
             try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/refundmine.lock timeout 300 python3 refundmine.py >> {OUTD}/refundmine.log 2>&1'], start_new_session=True,
                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception: pass
+            # 2026-11-05 用户「彻底解决同时掉线」：会话看门狗，约 10 分钟一次，只读
+            if time.time() - SW_LAST[0] >= 590:
+                SW_LAST[0] = time.time()
+                try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/sessionwatch.lock timeout 300 python3 session_watch.py >> {OUTD}/session_watch.log 2>&1'], start_new_session=True,
+                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception: pass
             # 2026-11-03 02:08 用户「要」：开售定时预埋免费份
             try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/salearm.lock timeout 110 python3 salearm.py >> {OUTD}/salearm.log 2>&1'], start_new_session=True,
                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

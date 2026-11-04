@@ -7,7 +7,10 @@ D = '$AIDBOT_DATA'
 EV = f'{D}/discover_out/newtpl_events.jsonl'; ST = f'{D}/discover_out/newtpl_reported.json'
 HEAT = 30
 st = json.load(open(ST)) if os.path.exists(ST) else {}
-res = (json.load(open(f'{D}/discover_out/newtpl.json')) or {}).get('contracts', {})
+_f = f'{D}/discover_out/newtpl.json'
+if not os.path.exists(_f): _f = f'{D}/newtpl_state.json'
+_r = json.load(open(_f)) or {}
+res = _r.get('contracts', _r) if isinstance(_r, dict) else {}
 items = []
 for line in open(EV) if os.path.exists(EV) else []:
     try: e = json.loads(line)
