@@ -590,3 +590,8 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 漏领根因：salearm 只在开售前 90 秒内拉起 fire，但自身约 60 秒一轮、单轮最长 110 秒，11-04 的 0x5843/0x539b/0xac79/0xa178 全错过窗口被标 expired。00:47 手动补领前三个，六号各 1 份 18/18 已确认到账；0xa178 现已不可领。
 - 改：提前 15 分钟拉起 fire（睡到开售前 1 秒）；错过开售 6 小时内仍补拉；六号并发 eth_call 探测（0.3 秒一轮）；mint_many 执行前余额读数与 execute 并行，开售模式不再每笔 sleep 2 秒。安全闸门（源码验证、preview 干净才 execute）不变。
 - 不采纳 Clawby 预埋 preview：未开售时 preview 模拟必然 revert，过不了 simulationCode=000000000 闸门；YOLO 只省人工确认，我们本来就没有。备份 salearm.py.bak_1105、mint_many.py.bak_1105。
+
+## Agent ID 内盘全量扫描 + Clawby 信号复核（2026-11-05）
+- 用户要求：扫 GANG、Flap、TagAI（及 Four.meme Agent ID 专区）内盘阶段的 Agent ID Token，不限币安 Agent 指定；每个合约用 Clawby 交易信号源（app.openclawby.com/signals）复核，只推最值得参与的；免费的自动 mint（沿用原 0 元规则），付费只推简报等口令；无达标保持安静。
+- 脚本 platforms/agentid_scan.py（只读）：Four pulse（未迁移）、gang.fun/api/tokens（未毕业，new+trending）、bsc-api.tagai.fun/community/catalogPage?source=agent（TagAI Agent 目录，含 GANG/Flap/Four 导入）；信号用 analyze-api.openclawby.com/api/signals/feed?market=meme（公开、无 key，含 BSC 内盘币）。api.openclawby.com relay 免费档 5 次/分钟，11-05 00:50 已被封禁，脚本不调用。
+- 评级：Clawby 看空 / 税 >10% / 开发者卖出过半 / 已上外盘 → 避开；无官网或官方 X → 最多观望；有官源且（Clawby 看多 ≥60% 或内盘进度 ≥20% 或 ≥100 持有人）→ 可参与。巡逻 2c+ 步只推 new_picks（每合约一次）。
