@@ -183,8 +183,13 @@ def body_with_helpers(fns, name, depth=2, seen=None):
     return out
 
 
+# 2026-11-05 BBF 误判：onlyToken/onlyController 等是合约之间的调用限制，不是项目方特权
+CONTRACT_ROLE = re.compile(r"\bonly(Token|Controller|Core|Pair|Minter|Self|Router|Pool|Oracle|Factory|Hook|Project|Vault|Source|Publisher|EntryPoint|Bridge)\b")
+
+
 def is_priv(f):
-    return bool(PRIV_MOD.search(f['mods']) or PRIV_BODY.search(f['body'][:600]))
+    mods = CONTRACT_ROLE.sub(' ', f['mods'])
+    return bool(PRIV_MOD.search(mods) or PRIV_BODY.search(f['body'][:600]))
 
 
 # ---------------- 链上读 ----------------
@@ -237,7 +242,7 @@ def token_check(token, minter):
     for s in ('buyTax()', 'sellTax()', 'taxFee()', '_taxFee()', 'buyFee()', 'sellFee()', 'totalFees()', 'sellTotalFees()', 'buyTotalFees()', 'TAX_BPS()', 'taxBps()'):
         v = dec('uint256', call_raw(token, s))
         if v is None: continue
-        pct = v if v <= 100 else (v / 100 if v <= 10000 else None)
+        pct = (v / 100 if v <= 10000 else None) if 'bps' in s.lower() else (v if v <= 100 else (v / 100 if v <= 10000 else None))  # 2026-11-05 BBF：TAX_BPS=100 是 1%，不是 100%
         if pct is None: continue
         info.setdefault('tax', {})[s[:-2]] = pct
         if pct > 10: risk.append(f'税>10%（{s[:-2]}={pct}%）')
@@ -465,7 +470,7 @@ def analyze(a, vinfo):
             s2, r2, info = token_check(token[0], a); safe += s2; risk += r2; p['token'].update({k: info.get(k) for k in ('flags', 'owner', 'pair', 'tax') if info.get(k) is not None})
         name = f'{name or ""} ({token[1]})'.strip()
     elif self_sym: name = f'{name or ""} ({self_sym})'.strip()
-    token_pay = [n for n in free_entries if re.search(r'transferFrom\(\s*msg\.sender', body_with_helpers(fns, n), re.I)]
+    token_pay = [n for n in free_entries if re.search(r'transferFrom\(\s*(msg\.sender|_msgSender\(\))|\.collect\(\s*(msg\.sender|_msgSender\(\))', body_with_helpers(fns, n, depth=3), re.I)]  # 2026-11-05 BBF：库函数 USDTMintFee.collect(msg.sender) 也算 ERC20 付费
     if token_pay:
         p['pay_in_erc20'] = token_pay
         if isinstance(views.get('firstPrice'), int) and views.get('firstPrice') == 0: p['first_share_free'] = True
