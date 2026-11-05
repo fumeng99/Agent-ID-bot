@@ -102,9 +102,18 @@ for M in sorted(tg):
                             ref = '0' * 64 if a is MAINA else MAINA['bsc'][2:].lower().rjust(64, '0')
                             stb = go(a, M, '0x' + sel('mintPool(uint256,address,uint256)') + u(nb) + ref + u(mo), value=str(nb * price))
                             out['actions'].append((M[:10], a['label'], 'mintPool_B', nb, nb * price / 1e18, stb[0], str(stb[1])[:90]))
+                            if nb < bLeft: out['blocked'].append((M[:10], a['label'], 'b_low_bnb', b / 1e18, bLeft - nb))
                     elif bLeft > 0 and nb < bLeft:
                         out['blocked'].append((M[:10], a['label'], 'b_low_bnb', b / 1e18, bLeft))
                 except Exception as ex: out['blocked'].append((M[:10], a['label'], 'b_err', str(ex)[:80]))
         st[key] = e
 json.dump(st, open(ST, 'w')); json.dump(out, open(OUT, 'w'), ensure_ascii=False)
 if out['actions']: print(json.dumps(out, ensure_ascii=False))
+# 2026-11-05 漏洞修复：余额不够打满 A/B（或 preview 报余额不足）时立刻补 BNB 到 30U（用户 11-01 19:34 授权），下一轮（约 60 秒）自动补打；同时记日志并让巡逻在「⚠️需处理」提醒
+_low = [x for x in out['blocked'] if x[2] in ('low_bnb', 'b_low_bnb')] + [x for x in out['actions'] if 'Insufficient native' in str(x)]
+if _low and not DRY:
+    try:
+        open('discover_out/agc_lowbnb.log', 'a').write(time.strftime('%m-%d %H:%M ', time.gmtime(time.time() + 8 * 3600)) + json.dumps(_low, ensure_ascii=False) + '\n')
+        subprocess.Popen(['bash', '-c', 'flock -n /tmp/gastopup.lock timeout 200 python3 gas_topup.py >> discover_out/gas_topup.log 2>&1'], cwd=D, start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception: pass

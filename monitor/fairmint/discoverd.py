@@ -540,6 +540,10 @@ def daemon():
                 try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/sessionwatch.lock timeout 300 python3 session_watch.py >> {OUTD}/session_watch.log 2>&1'], start_new_session=True,
                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 except Exception: pass
+                # 2026-11-05 主号 BNB 掉到 10U 没被补（巡逻没按时跑 gas_topup），导致 AGC A 档 10 份没打：常驻每 10 分钟补一次（用户 11-01 19:34 授权 <25U 补到 30U）
+                try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/gastopup.lock timeout 200 python3 gas_topup.py >> {OUTD}/gas_topup.log 2>&1'], start_new_session=True,
+                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception: pass
             # 2026-11-03 02:08 用户「要」：开售定时预埋免费份
             try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/salearm.lock timeout 110 python3 salearm.py >> {OUTD}/salearm.log 2>&1'], start_new_session=True,
                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
