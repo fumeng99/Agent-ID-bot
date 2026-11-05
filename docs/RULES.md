@@ -619,3 +619,7 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 重登流程：safe_session.sh signin 发码后，立刻后台跑 $AIDBOT_HOME/baw/relogin_wait.sh <目录>（等扫码→verify→马上补跑 refundmine），用户不必回「扫好了」。同一时间只发一个号的码，不并发 signin（新码会作废旧码）。
 - 不在其他设备/平台登录这六个 Agentic 钱包（一个钱包只认一个会话，新登录会踢掉这里）。
 - 2026-11-05 Clawby 1.0.70→1.0.72（42space Blitz/PIN 提示，与信号接口无关）
+
+## 2026-11-05 13:15 开售定时修复（Gachagent 0xe23d…9d39 六号全空）
+- 根因 1：discoverd 源码加了 salearm/gas_topup 调度，但常驻进程没重启，一直跑旧代码；Gachagent 12:01:31 开售，12:50 重启后才拉起，免费 2343 份早已领完（FreeSignedOut）。修：discoverd 每轮检查自身源码 mtime，变了且能编译就原地 execv 重载。
+- 根因 2：免费入口识别把 claimSponsorReward（推荐人佣金，NothingToSend）排在 freeMint 前。修：BAD 加 sponsor/referr/invite/commission/rebate/dividend/owed/release/vest/stake；mint/free 类排前、claim 类排后；已有排期同步清洗。

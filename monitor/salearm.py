@@ -21,7 +21,7 @@ from codeutil import sel
 PLAN = 'salearm_plan.json'; EV = 'discover_out/salearm_events.jsonl'
 EARLY_SPAWN = 900; LATE_FIRE = 6 * 3600
 ACCTS = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
-BAD = re.compile(r'fee|withdraw|owner|refund|admin|set|pause|rescue|sweep|transfer|approve|burn|pull|pay|sell|redeem|snapshot|upgrade|renounce|init', re.I)
+BAD = re.compile(r'sponsor|referr|invite|commission|rebate|dividend|owed|release|vest|stake|fee|withdraw|owner|refund|admin|set|pause|rescue|sweep|transfer|approve|burn|pull|pay|sell|redeem|snapshot|upgrade|renounce|init', re.I)
 GOOD = re.compile(r'free|gift|claim|airdrop|mint', re.I)
 STARTN = re.compile(r'start|open|launch|begin', re.I)
 
@@ -76,6 +76,9 @@ def build(a, abi):
             elif ins == ['uint256']: frees.append((n + '(1)', s + u(1)))
             elif ins == ['address']: frees.append((n + '(0)', s + u(0)))
             elif ins == ['uint256', 'address']: frees.append((n + '(1,0)', s + u(1) + u(0)))
+    # 2026-11-05 修：Gachagent 把 claimSponsorReward（只给推荐人领佣金）当成免费入口排在 freeMint 前，三个号走错函数。
+    # 现在排除推荐/佣金/分红/释放类，且 mint/free 类排前、claim 类排后。
+    frees.sort(key=lambda f: 0 if re.search(r'mint|free', f[0], re.I) else 1)
     t = None
     for n in starts:
         try:

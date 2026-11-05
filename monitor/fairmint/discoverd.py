@@ -506,7 +506,17 @@ def daemon():
             except Exception: pass
             time.sleep(15)
     threading.Thread(target=wd, daemon=True).start()
+    # 2026-11-05 修：改了本文件但常驻进程还跑旧代码（salearm/gas_topup 新加的调度没生效，Gachagent 12:01 开售 12:50 才拉起）。
+    # 每轮开头检查源码 mtime，变了且能编译就原地 execv 重载（同 pid，文件锁随 exec 释放）。
+    SRC = os.path.abspath(__file__); SRC_MT = os.path.getmtime(SRC)
     while True:
+        try:
+            if os.path.getmtime(SRC) != SRC_MT:
+                import py_compile; py_compile.compile(SRC, doraise=True)
+                log('源码已更新，原地重载'); sys.stdout.flush(); sys.stderr.flush()
+                os.execv(sys.executable, [sys.executable, SRC] + sys.argv[1:])
+        except Exception as ex:
+            log(f'重载跳过（编译失败或其他）：{repr(ex)[:120]}'); SRC_MT = os.path.getmtime(SRC)
         t = time.time(); beat[0] = t
         slk = open(STATE + '.lock', 'w'); fcntl.flock(slk, fcntl.LOCK_EX)
         try:
