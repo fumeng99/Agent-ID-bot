@@ -623,3 +623,4 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 ## 2026-11-05 13:15 开售定时修复（Gachagent 0xe23d…9d39 六号全空）
 - 根因 1：discoverd 源码加了 salearm/gas_topup 调度，但常驻进程没重启，一直跑旧代码；Gachagent 12:01:31 开售，12:50 重启后才拉起，免费 2343 份早已领完（FreeSignedOut）。修：discoverd 每轮检查自身源码 mtime，变了且能编译就原地 execv 重载。
 - 根因 2：免费入口识别把 claimSponsorReward（推荐人佣金，NothingToSend）排在 freeMint 前。修：BAD 加 sponsor/referr/invite/commission/rebate/dividend/owed/release/vest/stake；mint/free 类排前、claim 类排后；已有排期同步清洗。
+- 2026-11-05：Clawby 1.0.72→1.0.73（42space baw 登录/执行后端；信号接口无异常，巡逻未改）。
