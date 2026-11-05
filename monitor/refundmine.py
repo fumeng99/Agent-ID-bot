@@ -45,7 +45,8 @@ for M in sorted(tg):
         bal = int(rpc('eth_getBalance', [M, 'latest']), 16)
         owed = ci(M, '0x' + sel('refundOwed()')); price = ci(M, '0x' + sel('PRICE_PER_SHARE()'))
     except Exception as ex: out['blocked'].append((M, 'read_err', str(ex)[:80])); continue
-    gate_ok = vs is True and impl == 0 and bal >= owed and price > 0
+    slack = int(0.05e18) if M.lower() == '0x6288dfe86f22b53eeb6886ae2d78941de7483743' else 0  # 2026-11-05 16:56 用户授权：AGC 合约余额差额 ≤0.05 BNB 仍放行
+    gate_ok = vs is True and impl == 0 and bal + slack >= owed and price > 0
     if not gate_ok: out['blocked'].append((M, 'gate', {'verified': vs, 'proxy': impl != 0, 'bal': bal / 1e18, 'owed': owed / 1e18}))
     MAINA = next(a for a in A if a['label'] == '主')
     for a in [MAINA] + [x for x in A if x is not MAINA]:
@@ -67,7 +68,7 @@ for M in sorted(tg):
                     tok = '0x' + call(M, '0x' + sel('agc()'))[-40:]
                     lf = open('discover_out/agc_sell.log', 'a'); lf.write(time.strftime('%m-%d %H:%M:%S ', time.gmtime(time.time() + 8 * 3600)) + f'claim ok {a["label"]} -> sell {tok}\n'); lf.flush()
                     time.sleep(6)
-                    subprocess.Popen(['python3', 'fast_sell.py', tok, '100', '--slip', '8', a['label']], stdout=lf, stderr=lf, cwd=D)
+                    subprocess.Popen(['python3', 'sell_retry.py', tok, '100', '--slip', '8', a['label']], stdout=lf, stderr=lf, cwd=D)
                     out['actions'].append((M[:10], a['label'], 'sell_spawned', tok))
                 except Exception as ex: out['blocked'].append((M[:10], a['label'], 'sell_err', str(ex)[:80]))
         # 挖：今日额度
