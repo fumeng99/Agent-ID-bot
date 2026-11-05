@@ -54,7 +54,7 @@ for M in sorted(tg):
         # 领回：claimFree([]) 有到期仓位才发（先 eth_call 看是否 revert/有变化由 preview 决定）
         try:
             pq = call(M, '0x' + sel('pending(address)') + pad); n_free = int(pq[2:66], 16)  # 已到期可领的押金 BNB
-        except Exception: n_free = None
+        except Exception: n_free = None; pq = ''
         key = f'{M}|{a["label"]}'; e = st.get(key, {})
         if n_free and time.time() >= e.get('next_claim', 0):
             data = '0x' + sel('claimFree(uint256[])') + u(32) + u(0)
@@ -71,6 +71,23 @@ for M in sorted(tg):
                     subprocess.Popen(['python3', 'sell_retry.py', tok, '100', '--slip', '8', a['label']], stdout=lf, stderr=lf, cwd=D)
                     out['actions'].append((M[:10], a['label'], 'sell_spawned', tok))
                 except Exception as ex: out['blocked'].append((M[:10], a['label'], 'sell_err', str(ex)[:80]))
+        # 2026-11-05 17:10 用户原话「要 能领取了就立马卖」：B 档 mintPool 已释放奖励（pending 第 3 槽 rewardVested）≥10 万 AGC 就 claimReward([]) 领出，确认 ok 立刻全卖成 USDT（sell_retry：quote 预演、滑点 ≤8%、失败 5 秒重试 3 次）；同一轮已领 A 的号下一轮再领，避免两笔卖单抢同一余额
+        try:
+            vest = int(pq[130:194], 16)
+        except Exception: vest = 0
+        if vest >= 100000 * 10**18 and time.time() >= e.get('next_rclaim', 0) and not any(x[1] == a['label'] and x[2] == 'claim' for x in out['actions']):
+            str_ = go(a, M, '0x' + sel('claimReward(uint256[])') + u(32) + u(0), value='0')
+            out['actions'].append((M[:10], a['label'], 'claimReward', vest // 10**18, str_[0], str(str_[1])[:90]))
+            e['next_rclaim'] = time.time() + (600 if str_[0] not in ('ok', 'dry_ok') else 1800)
+            if str_[0] == 'ok' and not DRY:
+                try:
+                    tok = '0x' + call(M, '0x' + sel('agc()'))[-40:]
+                    lf = open('discover_out/agc_sell.log', 'a'); lf.write(time.strftime('%m-%d %H:%M:%S ', time.gmtime(time.time() + 8 * 3600)) + f'claimReward ok {a["label"]} {vest // 10**18} AGC -> sell {tok}\n'); lf.flush()
+                    time.sleep(6)
+                    subprocess.Popen(['python3', 'sell_retry.py', tok, '100', '--slip', '8', a['label']], stdout=lf, stderr=lf, cwd=D)
+                    out['actions'].append((M[:10], a['label'], 'sell_spawned_B', tok))
+                except Exception as ex: out['blocked'].append((M[:10], a['label'], 'sell_err', str(ex)[:80]))
+        st[key] = e
         # 挖：今日额度
         if gate_ok:
             try:
