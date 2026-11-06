@@ -624,3 +624,5 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 根因 1：discoverd 源码加了 salearm/gas_topup 调度，但常驻进程没重启，一直跑旧代码；Gachagent 12:01:31 开售，12:50 重启后才拉起，免费 2343 份早已领完（FreeSignedOut）。修：discoverd 每轮检查自身源码 mtime，变了且能编译就原地 execv 重载。
 - 根因 2：免费入口识别把 claimSponsorReward（推荐人佣金，NothingToSend）排在 freeMint 前。修：BAD 加 sponsor/referr/invite/commission/rebate/dividend/owed/release/vest/stake；mint/free 类排前、claim 类排后；已有排期同步清洗。
 - 2026-11-05：Clawby 1.0.72→1.0.73（42space baw 登录/执行后端；信号接口无异常，巡逻未改）。
+
+【2026-11-06 16:50 用户「为什么卡单 彻底解决这个问题」】卡单根因：fast_sell.py 把纯数字账号标签（001/002）当成百分比参数丢掉 → 只卖一个号变成六号同时卖，多进程抢同一余额（30003001 余额不足）、触发币安限流（15002）、订单 FAILED，3 次 5 秒重试 15 秒内耗尽后残余无人处理。修复：①标签按 accounts.json 精确匹配，未知标签不下单（同时修好 possell/price_trigger 带标签的卖单）；②sell_retry 按币 flock 排队串行，5/15/30/60 秒退避共 5 次，限流多等 10 秒，余额为 0 视为完成；③新增 agc_sweep.py，refundmine 每轮没新卖单时扫六号 AGC 余额，≥0.3U 自动补卖。滑点 ≤8% 等规则不变。备份 *.bak_1106。

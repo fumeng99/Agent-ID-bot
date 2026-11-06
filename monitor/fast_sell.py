@@ -13,8 +13,15 @@ SLIP = str(min(float(opt('--slip', '8')), 15))  # D：滑点上限 15%
 GAS = opt('--gas', 'HIGH')
 PX = float(opt('--px', '0') or 0)  # 2026-11-04：possell 估算价；quote 实价 < 估算 50% 不下单（BNBbaby 价格源错误误卖）
 pos = [x for i, x in enumerate(args) if not x.startswith('--') and (i == 0 or args[i-1] not in ('--slip', '--gas', '--px'))]
-T = pos[0]; PCT = float(pos[1]) if len(pos) > 1 and pos[1].replace('.', '').isdigit() else 100.0
-only = [x for x in pos[1:] if not x.replace('.', '').isdigit()]
+# 2026-11-06 修卡单根因：账号标签 001/002 是纯数字，旧逻辑把它当成百分比参数丢掉 → only 为空 → 卖全部六号。
+# 结果是给 001 卖时六号一起下单，多个进程抢同一余额（30003001 余额不足）、触发限流（15002）、订单 FAILED。
+# 现在：只有第 2 个位置参数可作百分比；标签一律按 accounts.json 的 label 精确匹配。
+LABELS = {a['label'] for a in A}
+T = pos[0]
+PCT = float(pos[1]) if len(pos) > 1 and pos[1] not in LABELS and pos[1].replace('.', '').isdigit() else 100.0
+only = [x for x in pos[1:] if x in LABELS]
+bad = [x for x in pos[1:] if x not in LABELS and not (x == pos[1] and x.replace('.', '').isdigit())]
+if bad: print(json.dumps({'error': f'未知账号标签 {bad}，不下单'}, ensure_ascii=False)); sys.exit(2)
 acc = [a for a in A if not only or a['label'] in only]
 t0 = time.time()
 dec = int(batch([('eth_call', [{'to': T, 'data': '0x313ce567'}, 'latest'])])[0], 16)

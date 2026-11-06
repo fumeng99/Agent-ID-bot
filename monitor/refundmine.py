@@ -135,3 +135,6 @@ if _low and not DRY:
         subprocess.Popen(['bash', '-c', 'flock -n /tmp/gastopup.lock timeout 200 python3 gas_topup.py >> discover_out/gas_topup.log 2>&1'], cwd=D, start_new_session=True,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception: pass
+# 2026-11-06 用户「彻底解决卡单」：本轮没有新起卖单时跑扫尾，链上还有 AGC（≥0.3U）就补卖，保证不留残余
+if not any('sell_spawned' in str(x[2]) for x in out['actions']):
+    subprocess.Popen(['bash', '-c', 'timeout 90 python3 agc_sweep.py >> discover_out/agc_sweep.log 2>&1'], cwd=D, start_new_session=True)
