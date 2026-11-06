@@ -629,3 +629,4 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 【2026-11-06 16:52 用户「要」】AGC B 档 14 天到期自动 withdrawLP([])（value=0、preview 干净），取回的 AGC 立刻全卖成 USDT，BNB 留钱包。只限 0x6288…3743。
 - 2026-11-06 18:45 用户原话「全部授权应该是临时用的 用完取消才对」：所有代币授权用完即撤；approvals_watch 每轮把上一轮已存在的授权自动 revoke（约 10 分钟后）。当日已撤主 AGC/USDT→Binance Wallet(0xb300…028d，USDT 为无限额)、主 USDT→0xC069/0x3643、001/002 USDT→0xD6aF。
 - 2026-11-07 00:21 用户「a能赚就继续打」：refundmine 打 A 前按现价报价，奖励换 BNB ≤5e13 wei（约 0.035U，一轮 gas）的号跳过（a_unprofitable）。备份 refundmine.py.bak_1107。
+- 2026-11-07 01:35 用户「打 先打主 然后走主的邀请码再打」：AGD（0x9a46…6bac）A 档 agd_mint.py（主 referrer=0，其余 referrer=主）；agd_claim.py 24h 到期 claimA 并全卖（discoverd 每轮调用）。只今天这一轮打，之后每天打需用户确认。

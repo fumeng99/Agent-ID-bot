@@ -544,6 +544,10 @@ def daemon():
             try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/refundmine.lock timeout 300 python3 refundmine.py >> {OUTD}/refundmine.log 2>&1'], start_new_session=True,
                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception: pass
+            # 2026-11-07 01:35 用户「打」：AGD A 档 24h 到期自动 claimA 并全卖
+            try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/agdclaim.lock timeout 300 python3 agd_claim.py >> {OUTD}/agd_claim.log 2>&1'], start_new_session=True,
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception: pass
             # 2026-11-05 用户「彻底解决同时掉线」：会话看门狗，约 10 分钟一次，只读
             if time.time() - SW_LAST[0] >= 590:
                 SW_LAST[0] = time.time()
