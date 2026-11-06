@@ -111,7 +111,17 @@ for M in sorted(tg):
                 aLeft, opened, paused = w[3], w[15], w[16]
                 n = aLeft  # 2026-11-05 02:37 用户「后续每天打满 a和b」：A 档按当日额度打满，取消 0.02 BNB/号/天上限
                 b = int(rpc('eth_getBalance', [a['bsc'], 'latest']), 16)
-                if opened and not paused and n > 0 and b - n * price - GAS >= KEEP:
+                # 2026-11-07 00:21 用户原话「a能赚就继续打」：每号按现价报价 n 份 A 奖励（w[8]×n）换 BNB，须大于该号一轮 gas（铸+领+卖+授权，实测约 0.02U，按 5e13 wei≈0.035U 保守算）才打，否则跳过记 a_unprofitable。只限 AGC 合约。
+                a_ok = True
+                if M == '0x6288dfe86f22b53eeb6886ae2d78941de7483743' and opened and not paused and n > 0:
+                    try:
+                        _RT = '0x10ED43C718714eb63d5aA57B78B54704E256024E'
+                        _ra = int(call(_RT, '0x' + sel('getAmountsOut(uint256,address[])') + u(w[8] * n) + u(64) + u(2) + '63dea5acdbe1f27c968907d08610a5f0a0284ba6'.rjust(64, '0') + 'bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c'.rjust(64, '0'))[-64:], 16)
+                        if _ra <= 5 * 10**13:
+                            a_ok = False; out['blocked'].append((M[:10], a['label'], 'a_unprofitable', _ra / 1e18, n))
+                    except Exception as ex:
+                        a_ok = False; out['blocked'].append((M[:10], a['label'], 'a_quote_err', str(ex)[:60]))
+                if a_ok and opened and not paused and n > 0 and b - n * price - GAS >= KEEP:
                     ref = '0' * 64 if a is MAINA else MAINA['bsc'][2:].lower().rjust(64, '0')
                     stm = go(a, M, '0x' + sel('mintFree(uint256,address)') + u(n) + ref, value=str(n * price))
                     out['actions'].append((M[:10], a['label'], 'mint', n, n * price / 1e18, stm[0], str(stm[1])[:90]))
