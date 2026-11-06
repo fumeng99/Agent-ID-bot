@@ -87,6 +87,21 @@ for M in sorted(tg):
                     subprocess.Popen(['python3', 'sell_retry.py', tok, '100', '--slip', '8', a['label']], stdout=lf, stderr=lf, cwd=D)
                     out['actions'].append((M[:10], a['label'], 'sell_spawned_B', tok))
                 except Exception as ex: out['blocked'].append((M[:10], a['label'], 'sell_err', str(ex)[:80]))
+        # 2026-11-06 16:52 用户原话「要」（回答「19 号自动取回 LP 并卖成 U 吗」）：B 档锁定 14 天到期（pending 第 4 槽 lpWithdrawable>0）就 withdrawLP([]) 取回 LP（合约拆成 AGC+BNB 并结清剩余奖励），value=0、preview 干净才执行；取回的 AGC 立刻全卖成 USDT（sell_retry，滑点 ≤8%），BNB 留在钱包。只限该合约。
+        try: lpw = int(pq[194:258], 16)
+        except Exception: lpw = 0
+        if lpw > 0 and time.time() >= e.get('next_lpw', 0) and not any(x[1] == a['label'] and x[2] in ('claim', 'claimReward') for x in out['actions']):
+            str_ = go(a, M, '0x' + sel('withdrawLP(uint256[])') + u(32) + u(0), value='0')
+            out['actions'].append((M[:10], a['label'], 'withdrawLP', lpw, str_[0], str(str_[1])[:90]))
+            e['next_lpw'] = time.time() + (600 if str_[0] not in ('ok', 'dry_ok') else 300)
+            if str_[0] == 'ok' and not DRY:
+                try:
+                    tok = '0x' + call(M, '0x' + sel('agc()'))[-40:]
+                    lf = open('discover_out/agc_sell.log', 'a'); lf.write(time.strftime('%m-%d %H:%M:%S ', time.gmtime(time.time() + 8 * 3600)) + f'withdrawLP ok {a["label"]} {lpw} 份 -> sell {tok}\n'); lf.flush()
+                    time.sleep(6)
+                    subprocess.Popen(['python3', 'sell_retry.py', tok, '100', '--slip', '8', a['label']], stdout=lf, stderr=lf, cwd=D)
+                    out['actions'].append((M[:10], a['label'], 'sell_spawned_LP', tok))
+                except Exception as ex: out['blocked'].append((M[:10], a['label'], 'sell_err', str(ex)[:80]))
         st[key] = e
         # 挖：今日额度
         if gate_ok:
