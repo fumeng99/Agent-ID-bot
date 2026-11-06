@@ -33,7 +33,7 @@ FALLBACK = {
     'claimscan': (D, ['python3', 'claimscan.py', '60'], 90),
     'platforms': (D, ['python3', 'platforms/platforms.py'], 90),
     'tg': (D, ['python3', 'tg/tgcall.py', 'agentidcall', 'dashutiaozi'], 90),
-    'approvals': (D, ['python3', 'approvals_watch.py'], 60),
+    'approvals': (D, ['python3', 'approvals_watch.py'], 240),
     'fastprogress': (FM, ['python3', 'fastprogress.py'], 40),
 }
 

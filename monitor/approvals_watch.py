@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """授权巡检（只读）。学 -tools v0.4.1 approvals watch：用 baw approvals list 查每个账号 BSC 上的授权，
-和上次记下的比，新出现的授权提醒用户（无限额或币安标了风险 → 重要）。只提醒，绝不撤销、不签名。
+和上次记下的比，新出现的授权提醒用户（无限额或币安标了风险 → 重要）。2026-11-06 起：放置超过一轮（约 10 分钟）的授权自动撤销（用户要求授权临时用、用完取消）。
 输出 JSON：{first, accounts:{label:{total, new:[...]}}, alerts:[...]}；第一次运行只记底，不提醒。
 状态：approvals_state.json（只存授权键，不含密钥）。"""
 import json, os, subprocess, sys, time
@@ -37,6 +37,19 @@ for a in ACC:
     for x in new:
         lv = '重要' if unlimited(x.get('amount')) or risky(x) else '注意'
         out['alerts'].append({'level': lv, 'account': lab, 'token': x.get('tokenSymbol') or x.get('tokenContract'), 'token_contract': x.get('tokenContract'), 'spender': x.get('spender'), 'spender_name': x.get('spenderName'), 'amount': 'unlimited' if unlimited(x.get('amount')) else x.get('amount'), 'risky': x.get('riskyMsg') or x.get('riskyLevel'), 'type': x.get('type')})
+    # 2026-11-06 用户原话「全部授权应该是临时用的 用完取消才对」：上一轮已存在、本轮仍在的授权（已放置 ≥1 轮约 10 分钟，交易早已用完）自动撤销
+    rev = []
+    if prev is not None and os.environ.get('NO_REVOKE') != '1':
+        for x in L:
+            if key(x) in set(prev):
+                env = dict(os.environ, HOME=a['home'], npm_config_cache='/tmp/npmcache')
+                try:
+                    r = subprocess.run(['bash', '$AIDBOT_HOME/baw/baw-wrapper.sh', 'approvals', 'revoke', '--binanceChainId', '56', '--tokenContract', x.get('tokenContract'), '--spender', x.get('spender'), '--type', x.get('type') or 'approve', '--json'], capture_output=True, text=True, timeout=90, env=env)
+                    j = json.loads(r.stdout); ok = j.get('success')
+                    rev.append({'token': x.get('tokenSymbol'), 'spender': x.get('spender'), 'ok': ok, 'tx': (j.get('data') or {}).get('txHash'), 'err': None if ok else str(j.get('error'))[:80]})
+                except Exception as e:
+                    rev.append({'token': x.get('tokenSymbol'), 'spender': x.get('spender'), 'ok': False, 'err': str(e)[:80]})
+    if rev: out.setdefault('revoked', {})[lab] = rev
     out['accounts'][lab] = {'total': len(L), 'new': len(new)}
     state[lab] = keys
 tmp = ST + '.tmp'; json.dump(state, open(tmp, 'w')); os.replace(tmp, ST)
