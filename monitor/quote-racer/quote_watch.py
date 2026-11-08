@@ -75,6 +75,10 @@ for a, h in st['hits'].items():
         h['auto_tried'] = int(now); note = auto_launch(a, nm, pr)
         if note == h.get('auto_note') and not note.startswith('已自动'): note = ''  # 同样的「未自动抢」原因只报一次
         else: h['auto_note'] = note
+    # 2026-11-08 23:05 用户「这种60 进度就要叫我了」：进度 ≥60% 单独发一条「⚠️ 需处理」（每盘一次），未验证的附「破例 打」提示
+    if pct is not None and pct >= 60 and not h.get('alert60'):
+        h['alert60'] = int(now)
+        alerts.append(f"⚠️ 需处理｜{nm}｜{a[:6]}…{a[-4:]}｜报价型 mint 进度已到 {pct}%（{tm}/{cap}）｜单价 {pr/1e18 if pr else '读不到'} BNB｜{h.get('auto_note') or ''}｜源码未验证的回「破例 打 {nm}」即六号开抢｜https://bscscan.com/address/{a}")
     if note or h.get('last_pct', -100) == -100 or (pct is not None and pct - h['last_pct'] >= 10):
         alerts.append(f"{nm}｜{a[:6]}…{a[-4:]}｜报价型 mint（六号并发抢跑可用）｜进度 {pct}%（{tm}/{cap}）｜单价 {pr/1e18 if pr else '读不到'} BNB｜{note or ('回复「打 ' + nm + '」即六号开抢')}｜https://bscscan.com/address/{a}")
         h['last_pct'] = pct

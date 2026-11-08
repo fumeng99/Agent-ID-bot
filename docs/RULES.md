@@ -637,3 +637,4 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 用户回复「打」后立刻：`python3 $AIDBOT_HOME/quote-racer/racer.py --to <CA> --price <BNB单价> --qty <每号份数> --ok "<原话>" 主 001 002 海贼王 蜡笔小新 高`（background），源码未验证的须用户原话含「破例 + 该项目」才可启动（「打」不能代替破例，规则 B 不变）；已验证的按「打」启动。六号并发、每轮读新 totalMinted。
 - 局限：baw 预演约 1s+执行再模拟，热盘（≥50 份/分钟）胜率低；越早越好。
 - 2026-11-08 22:44 预授权（用户「要」「按照这次来」）：quote_watch 发现源码已验证（verify_source.py，代理实现也须验证）的报价型盘 → 自动拉起 racer.py --auto，每号份数 = min(0.03 BNB, quota.budget 余额×0.97) ÷ BASE_PRICE；未开售时每 620s 重拉；成交记 autofill.json 计入额度；race_*.log 新成交/回滚进 quote_watch alerts 当轮单发。未验证只提醒。
+- 2026-11-08 23:05 用户「这种60 进度就要叫我了」：报价型 mint 进度 ≥60% 时 quote_watch 必出一条「⚠️ 需处理」（每盘一次），巡逻当轮单发，与首次发现提醒并存。
