@@ -65,8 +65,9 @@ def u(x): return hex(x)[2:].rjust(64, '0')
 
 
 POW = []
+SIG = []
 def build(a, abi):
-    starts, frees = [], []; POW.clear()
+    starts, frees = [], []; POW.clear(); SIG.clear()
     powish = any(f.get('type') == 'error' and re.search(r'solution|nonce|pow|difficulty|hash|target', f.get('name', ''), re.I) for f in abi or [])
     for f in abi or []:
         if f.get('type') != 'function': continue
@@ -75,6 +76,9 @@ def build(a, abi):
         if m in ('view', 'pure') and not ins and STARTN.search(n) and not re.search(r'^open(Time|Block|edAt|BlockNumber)$', n) and f.get('outputs') and f['outputs'][0]['type'].startswith('uint'):
             starts.append(n)
         if m == 'nonpayable' and GOOD.search(n) and not BAD.search(n):
+            # 2026-11-09 GANG claimSocial 教训：带 bytes signature 的是项目方签名型（做社交任务后后台签），不是解题型，算不出来
+            if 'bytes' in ins and any(re.search(r'sig', i.get('name') or '', re.I) for i in f['inputs']):
+                SIG.append(n); continue
             # 2026-11-09 StonkChain 教训：mintEgg(nonce, referrer) 是解题型（keccak(seed,nonce) ≤ target），填 1 必失败
             if any(re.search(r'nonce|solution|proof|sig|answer|salt|seed', i.get('name') or '', re.I) for i in f['inputs']) or (powish and 'uint256' in ins):
                 POW.append(n); continue
@@ -200,6 +204,9 @@ def main():
             except Exception: opened = False
             if opened:
                 plan[a] = {'skip_until': time.time() + 6 * 3600, 'why': 'already_opened'}; ev({'contract': a, 'stage': 'skip_opened'}); continue
+            if SIG and not POW and not frees:
+                plan[a] = {'skip_until': time.time() + 6 * 3600, 'why': 'sig_needs_project', 'sig': list(SIG)}
+                ev({'contract': a, 'stage': 'sig_needs_project', 'fns': list(SIG), 'start': t}); continue
             if POW and not frees:
                 plan[a] = {'skip_until': time.time() + 6 * 3600, 'why': 'pow_needs_solver', 'pow': list(POW)}
                 ev({'contract': a, 'stage': 'pow_needs_solver', 'fns': list(POW), 'start': t}); continue
