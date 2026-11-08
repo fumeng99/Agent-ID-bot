@@ -14,6 +14,12 @@ for f in files:
         if now - os.path.getmtime(f) > 3 * 3600: continue
         addrs |= {a.lower() for a in re.findall(r'0x[0-9a-fA-F]{40}', open(f, errors='ignore').read()[-400000:])}
     except Exception: pass
+# 2026-11-08 23:18 用户「这种付费的只要进度到60%就提醒我」：所有能读出 已售/上限/单价 的付费 mint 合约进监控表 pw，进度首次 ≥60% 必报一次
+def _s(x): return chain.sel(x)[2:]
+SOLD_F = ['totalMinted()', 'totalSupply()', 'minted()', 'totalSold()', 'sold()']
+CAP_F = ['maxSupply()', 'MAX_SUPPLY()', 'cap()', 'maxMint()', 'MAX_MINT()', 'TOTAL_SUPPLY()']
+PRICE_F = ['BASE_PRICE()', 'PRICE()', 'price()', 'mintPrice()', 'MINT_PRICE()', 'cost()', 'getPrice()', 'pricePerShare()']
+SOLD = [_s(x) for x in SOLD_F]; CAPS = [_s(x) for x in CAP_F]; PRICES = [_s(x) for x in PRICE_F]
 new = [a for a in addrs if a not in st['checked'] and a not in st['hits']][:300]
 def code_of(a):
     c = chain.rpc('eth_getCode', [a, 'latest'])
@@ -26,6 +32,8 @@ for a in new:
         c = code_of(a)
         st['checked'][a] = int(now)
         if len(c) > 200 and sum(s in c for s in SIGS) >= 2: st['hits'][a] = {'first': int(now), 'last_pct': -100}
+        elif len(c) > 200 and any(x in c for x in SOLD) and any(x in c for x in CAPS) and any(x in c for x in PRICES):
+            st.setdefault('pw', {})[a] = {'first': int(now)}
     except Exception: pass
 alerts = []
 # 2026-11-08 22:44 用户「要」+「按照这次来」：源码已验证的报价型盘发现即自动六号开抢；每号每项目 ≤0.03 BNB（=FLOKI 这次每号 10 份×0.003），
@@ -82,6 +90,28 @@ for a, h in st['hits'].items():
     if note or h.get('last_pct', -100) == -100 or (pct is not None and pct - h['last_pct'] >= 10):
         alerts.append(f"{nm}｜{a[:6]}…{a[-4:]}｜报价型 mint（六号并发抢跑可用）｜进度 {pct}%（{tm}/{cap}）｜单价 {pr/1e18 if pr else '读不到'} BNB｜{note or ('回复「打 ' + nm + '」即六号开抢')}｜https://bscscan.com/address/{a}")
         h['last_pct'] = pct
+# 付费 60% 监控（pw）：批量读 已售/上限/单价，每盘一次
+pw = st.setdefault('pw', {}); live = [a for a, v in pw.items() if not v.get('done') and a not in st['hits']][-300:]
+calls = []
+for a in live:
+    for f in SOLD_F + CAP_F + PRICE_F: calls.append(('eth_call', [{'to': a, 'data': chain.sel(f)}, 'latest']))
+res = chain.batch(calls) if calls else []
+n = len(SOLD_F + CAP_F + PRICE_F)
+def first(vals):
+    for v in vals:
+        if isinstance(v, str) and len(v) == 66 and int(v, 16): return int(v, 16)
+for i, a in enumerate(live):
+    r = res[i * n:(i + 1) * n]; sold = first(r[:len(SOLD_F)]); cap = first(r[len(SOLD_F):len(SOLD_F) + len(CAP_F)]); pr = first(r[len(SOLD_F) + len(CAP_F):])
+    v = pw[a]
+    if not (sold and cap and pr) or cap < sold: continue
+    pct = round(100 * sold / cap, 1)
+    if pct >= 100: v['done'] = True; continue
+    if pct >= 60 and not v.get('alert60'):
+        v['alert60'] = int(now)
+        try: nm = chain.dec_str(chain.call(a, chain.sel('name()'))[1]) or '未命名'
+        except Exception: nm = '未命名'
+        alerts.append(f"⚠️ 需处理｜付费 mint 进度已到 {pct}%｜{nm}｜{a[:6]}…{a[-4:]}｜单价读数 {pr/1e18:g} BNB（以简报核实为准）｜请跑 mintcheck 出完整简报，需要买回复「确认买入 XX 金额 + 账号」｜https://bscscan.com/address/{a}")
+if len(pw) > 5000: st['pw'] = dict(list(pw.items())[-5000:])
 # 自动抢的成交/回滚结果：读 race_*.log 新增行，进 alerts 单发
 for lf in glob.glob('$AIDBOT_HOME/quote-racer/race_*.log'):
     off = st.setdefault('log_off', {}).get(lf, os.path.getsize(lf) if lf not in st['log_off'] else 0)
