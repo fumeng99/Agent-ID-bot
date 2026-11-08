@@ -17,13 +17,18 @@ for f in files:
 # 2026-11-08 23:18 用户「这种付费的只要进度到60%就提醒我」：所有能读出 已售/上限/单价 的付费 mint 合约进监控表 pw，进度首次 ≥60% 必报一次
 def _s(x): return chain.sel(x)[2:]
 SOLD_F = ['totalMinted()', 'totalSupply()', 'minted()', 'totalSold()', 'sold()']
-CAP_F = ['maxSupply()', 'MAX_SUPPLY()', 'cap()', 'maxMint()', 'MAX_MINT()', 'TOTAL_SUPPLY()']
-PRICE_F = ['BASE_PRICE()', 'PRICE()', 'price()', 'mintPrice()', 'MINT_PRICE()', 'cost()', 'getPrice()', 'pricePerShare()']
+# 2026-11-09 00:35 DOG(0xe996) 漏报：小写 openAt()/costOf(uint256) 克隆读不到；开池门槛优先于总供应
+CAP_F = ['OPEN_AT()', 'openAt()', 'OPEN_UNITS()', 'openUnits()', 'MAX_SHARES()', 'maxSupply()', 'MAX_SUPPLY()', 'cap()', 'maxMint()', 'MAX_MINT()', 'TOTAL_SUPPLY()']
+PRICE_F = ['BASE_PRICE()', 'PRICE()', 'price()', 'mintPrice()', 'MINT_PRICE()', 'cost()', 'getPrice()', 'pricePerShare()', 'bnbQuote(uint256)', 'costOf(uint256)', 'priceOf(uint256)']
+ARG1 = '%064x' % 1
+def cd(f): return chain.sel(f) + (ARG1 if f.endswith('(uint256)') else '')
 SOLD = [_s(x) for x in SOLD_F]; CAPS = [_s(x) for x in CAP_F]; PRICES = [_s(x) for x in PRICE_F]
 new = [a for a in addrs if a not in st['checked'] and a not in st['hits']][:300]
 def code_of(a):
     c = chain.rpc('eth_getCode', [a, 'latest'])
-    if len(c) < 400 and '360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc' in c:
+    h = c[2:].lower()
+    if h.startswith('363d3d373d3d3d363d73') and len(h) >= 60: c = chain.rpc('eth_getCode', ['0x' + h[20:60], 'latest'])
+    elif len(c) < 400 and '360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc' in c:
         impl = '0x' + chain.rpc('eth_getStorageAt', [a, '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc', 'latest'])[-40:]
         c = chain.rpc('eth_getCode', [impl, 'latest'])
     return c
@@ -94,7 +99,7 @@ for a, h in st['hits'].items():
 pw = st.setdefault('pw', {}); live = [a for a, v in pw.items() if not v.get('done') and a not in st['hits']][-300:]
 calls = []
 for a in live:
-    for f in SOLD_F + CAP_F + PRICE_F: calls.append(('eth_call', [{'to': a, 'data': chain.sel(f)}, 'latest']))
+    for f in SOLD_F + CAP_F + PRICE_F: calls.append(('eth_call', [{'to': a, 'data': cd(f)}, 'latest']))
 res = chain.batch(calls) if calls else []
 n = len(SOLD_F + CAP_F + PRICE_F)
 def first(vals):
@@ -107,6 +112,11 @@ for i, a in enumerate(live):
     pct = round(100 * sold / cap, 1)
     if pct >= 100: v['done'] = True; continue
     if pct >= 60 and not v.get('alert60'):
+        try:
+            orr = chain.call(a, chain.sel('opened()'))
+            if isinstance(orr, (list, tuple)): orr = orr[1] if len(orr) > 1 else orr[0]
+            if isinstance(orr, str) and len(orr) == 66 and int(orr, 16) == 1: v['done'] = True; continue
+        except Exception: pass
         # 2026-11-09 PUPPETCAT 教训：已 launched/已开池的铸造已关闭，不再提醒
         try:
             lr = chain.call(a, chain.sel('launched()'))

@@ -63,7 +63,7 @@ TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 ZERO32 = '0x' + '0' * 64
 ALL_TOPICS = [MINTED] + OPENS + [PAIR, OWN] + INIT
 COSTOF = '63' + CU.sel('costOf(uint256)')
-FM_SELS = ['63' + CU.sel(s) for s in ('costOf(uint256)', 'bnbQuote(uint256)', 'OPEN_AT()', 'OPEN_UNITS()', 'sharesMinted()', 'MAX_SHARES()',
+FM_SELS = ['63' + CU.sel(s) for s in ('costOf(uint256)', 'bnbQuote(uint256)', 'OPEN_AT()', 'OPEN_UNITS()', 'openAt()', 'sharesMinted()', 'MAX_SHARES()',
                                        'MAX_MINTS()', 'LIQUIDITY_TARGET_SHARES()')]
 NODES = list(dict.fromkeys(F.LOGS_RPCS + ['https://bsc.blockrazor.xyz']))  # blockrazor 只做 25 块小段兜底
 SMALL_ONLY = {'https://bsc.blockrazor.xyz'}
@@ -146,7 +146,10 @@ def scan_range(f, t, topics, heads, budget_end, prefer=None, avoid=None, address
 # 2026-11-02 17:3x：对账首轮把一批「REG + bnbQuote + totalMinted」的机器批量部署合约（Mesaphase/…lune/…core 等 90 个，无开池门槛）当成 fair mint 补进来，
 # 太吵。收紧：加入 found.json 的必须是「码里有 Jager Minted 事件」或「有开池门槛函数（OPEN_AT/OPEN_UNITS/MAX_SHARES/MAX_MINTS/LIQUIDITY_TARGET_SHARES）」
 # 或「字节码指纹与已知 fair mint 一致」；只含 Agent ID 登记合约的其余合约归 agentid_deployed（交巡逻核验，可能是免费/付费 mint），不进 found.json。
-OPEN_SELS = ['63' + CU.sel(s) for s in ('OPEN_AT()', 'OPEN_UNITS()', 'MAX_SHARES()', 'MAX_MINTS()', 'LIQUIDITY_TARGET_SHARES()', 'OPEN_BNB()')]
+# 2026-11-09 00:35 DOG(0xe996，binanciansai.meme 克隆) 用小写 openAt()，原来进不了 found.json → 没有进度监控
+OPEN_SELS = ['63' + CU.sel(s) for s in ('openAt()', 'openUnits()', 'OPEN_AT()', 'OPEN_UNITS()', 'MAX_SHARES()', 'MAX_MINTS()', 'LIQUIDITY_TARGET_SHARES()', 'OPEN_BNB()')]
+TRIO = ['63' + CU.sel(x) for x in ('openAt()', 'costOf(uint256)', 'totalMinted()')]
+def fm_trio(fc): fc = fc or ''; return all(x in fc for x in TRIO)  # 2026-11-09 DOG 类：无 REG/Minted 事件但有开池门槛+按份计价+已铸
 def fm_like(fc):
     fc = fc or ''
     return F.TOPICS[0][2:] in fc or any(s in fc for s in OPEN_SELS)
@@ -265,7 +268,7 @@ def handle_logs(ctx, logs, backfill=False, source_prefix=''):
 
 def judge(ctx, a, fc, blk, backfill, source, deployer=None, nonce=None):
     reg = CU.REG in fc
-    if fm_like(fc) and (reg or F.TOPICS[0][2:] in fc):
+    if fm_like(fc) and (reg or F.TOPICS[0][2:] in fc or fm_trio(fc)):
         ex = {'agentid_registry_in_code': reg}
         if deployer: ex.update({'deployer': deployer, 'deploy_nonce': nonce})
         add_fm(ctx, a, blk, 'premint', source, backfill, extra=ex, code=fc[:2] == '0x' and fc or None)
@@ -476,7 +479,7 @@ def reconcile(hours=2.0):
         try: fpm = codefp.norm('0x' + fc.split('0x')[1]) in fp_known if fp_known else False  # 只取合约自身码（full_code 后面拼的是实现合约码）
         except Exception: fpm = False
         if fpm: fp_hit += 1
-        if (fm_like(fc) and (CU.REG in fc or F.TOPICS[0][2:] in fc)) or (fpm and CU.REG in fc):
+        if (fm_like(fc) and (CU.REG in fc or F.TOPICS[0][2:] in fc or fm_trio(fc))) or (fpm and CU.REG in fc):
             add_fm(ctx, a, tos[a], 'new', 'reconcile_transfer_mint', True, extra={'template_fp_match': fpm, 'agentid_registry_in_code': CU.REG in fc}, code=fc)
     res['b_mint_contracts'] = len(tos); res['b_checked'] = len(tgt); res['b_fp_hit'] = fp_hit
     flush('(b)')

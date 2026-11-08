@@ -167,7 +167,7 @@ ONE = '%064x' % 1
 # 字段：key -> (函数签名, 参数)
 F = {'cost_q': ('bnbQuote(uint256)', ONE), 'cost_c': ('costOf(uint256)', ONE), 'opened_raw': ('opened()', ''),
      'total_minted': ('totalMinted()', ''), 'total_shares': ('TOTAL_SHARES()', ''), 'total_shares2': ('totalShares()', ''),
-     'total_paid_wei': ('totalPaid()', ''), 'open_at_shares': ('OPEN_AT()', ''), 'open_units': ('OPEN_UNITS()', ''), 'open_bnb_wei': ('OPEN_BNB()', ''),
+     'total_paid_wei': ('totalPaid()', ''), 'open_at_shares': ('OPEN_AT()', ''), 'open_units': ('OPEN_UNITS()', ''), 'open_at_lc': ('openAt()', ''), 'price_of': ('priceOf(uint256)', ONE), 'open_bnb_wei': ('OPEN_BNB()', ''),
      'pending_bnb_wei': ('pendingBnb()', ''), 'treasury_bps': ('TREASURY_BPS()', ''),
      'max_per_tx': ('MAX_PER_TX()', ''), 'paused': ('paused()', ''), 'renounced': ('renounced()', ''),
      'token_raw': ('token()', ''), 'pair_raw': ('pair()', ''),
@@ -180,14 +180,14 @@ F = {'cost_q': ('bnbQuote(uint256)', ONE), 'cost_c': ('costOf(uint256)', ONE), '
      'total_paid_shares': ('totalPaidShares()', ''), 'liq_target': ('LIQUIDITY_TARGET_SHARES()', ''), 'liq_reached': ('liquidityTargetReached()', '')}
 ADDR_KEYS = {'token_raw', 'pair_raw', 'usdt_raw', 'wbnb_raw'}
 TPL = {
-    'jager': ['cost_q', 'cost_c', 'opened_raw', 'total_minted', 'total_shares', 'total_shares2', 'total_paid_wei', 'open_at_shares', 'open_units',
+    'jager': ['open_at_lc', 'price_of', 'cost_q', 'cost_c', 'opened_raw', 'total_minted', 'total_shares', 'total_shares2', 'total_paid_wei', 'open_at_shares', 'open_units',
               'open_bnb_wei', 'pending_bnb_wei', 'treasury_bps', 'max_per_tx', 'paused', 'renounced', 'token_raw', 'pair_raw', 'deadline'],
     'jagent': ['shares_minted', 'max_shares', 'pool_open', 'price_wei', 'deadline', 'usdt_raw', 'wbnb_raw', 'token_raw', 'pair_raw'],
     'boss': ['total_minted', 'max_mints', 'finalized', 'price_wei', 'deadline', 'token_raw', 'pair_raw'],
     'mao': ['total_paid_shares', 'total_shares2', 'liq_target', 'liq_reached', 'price_wei', 'max_shares', 'token_raw'],
 }
 # 旧版读的字段（未识别模板、且本轮识别名额用完时用，保证不比原来慢）
-LEGACY = ['cost_q', 'cost_c', 'opened_raw', 'total_minted', 'total_shares', 'total_shares2', 'total_paid_wei', 'open_at_shares', 'open_bnb_wei',
+LEGACY = ['open_at_lc', 'cost_q', 'cost_c', 'opened_raw', 'total_minted', 'total_shares', 'total_shares2', 'total_paid_wei', 'open_at_shares', 'open_bnb_wei',
           'max_per_tx', 'paused', 'renounced', 'token_raw', 'pair_raw']
 TPL['other'] = LEGACY
 UNION = list(F)
@@ -205,7 +205,7 @@ def _addr(r): return '0x' + r[26:66] if isinstance(r, str) and len(r) >= 66 else
 
 def classify(raw):
     g = lambda k: raw.get(k)
-    if g('total_minted') is not None and (g('open_at_shares') or g('open_units')): return 'jager'
+    if g('total_minted') is not None and (g('open_at_shares') or g('open_units') or g('open_at_lc')): return 'jager'
     if g('liq_target') and g('total_paid_shares') is not None: return 'mao'
     if g('shares_minted') is not None and g('max_shares') and g('pool_open') is not None: return 'jagent'
     if g('total_minted') is not None and g('max_mints') and g('finalized') is not None: return 'boss'
@@ -239,8 +239,9 @@ def normalize(raw, tpl):
         i['opened'] = bool(o) if o is not None else None
         for k in ('total_minted', 'total_shares', 'total_shares2', 'total_paid_wei', 'open_bnb_wei', 'max_per_tx', 'paused', 'renounced', 'treasury_bps', 'pending_bnb_wei'):
             if g(k) is not None: i[k] = g(k)
-        oa = g('open_at_shares') or g('open_units')
-        if oa: i['open_at_shares'] = oa; i['open_at_src'] = 'OPEN_AT' if g('open_at_shares') else 'OPEN_UNITS'
+        oa = g('open_at_shares') or g('open_units') or g('open_at_lc')
+        if oa: i['open_at_shares'] = oa; i['open_at_src'] = 'OPEN_AT' if g('open_at_shares') else ('OPEN_UNITS' if g('open_units') else 'openAt')
+        if not i.get('cost_1share_bnb') and g('price_of'): i['cost_1share_bnb'] = g('price_of') / 1e18
     if g('deadline'): i['deadline_ts'] = g('deadline')
     for k in ('token', 'pair'):
         v = _addr(raw.get(k + '_raw')) if raw.get(k + '_raw') else None
