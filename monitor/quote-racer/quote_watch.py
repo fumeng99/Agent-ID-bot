@@ -140,4 +140,10 @@ for lf in glob.glob('$AIDBOT_HOME/quote-racer/race_*.log'):
             alerts.append(f"报价型自动抢｜{lf.split('race_')[1][:10]}…｜{j['acc']}｜{ {'ok':'成交','reverted':'链上回滚','unknown':'结果不确定（不重发）'}[j['state']] } {j.get('qty')} 份｜https://bscscan.com/tx/{j.get('tx')}")
 st['checked'] = dict(list(st['checked'].items())[-20000:])
 json.dump(st, open(ST, 'w'))
+# 2026-11-09 00:45 用户「彻底解决这个问题」：通用进度监控（不靠固定函数名），alerts 并入本轮
+try:
+    sys.path.insert(0, '$AIDBOT_HOME/quote-racer'); import progress_universal as PU
+    _pu = PU.run(max_new=120, budget=50); alerts += _pu['alerts']
+    sys.stderr.write('progress_universal ' + json.dumps({k: v for k, v in _pu.items() if k != 'alerts'}) + '\n')
+except Exception as _e: sys.stderr.write('progress_universal err ' + str(_e)[:200] + '\n')
 print(json.dumps({'scanned': len(new), 'hits': len(st['hits']), 'alerts': alerts}, ensure_ascii=False))
