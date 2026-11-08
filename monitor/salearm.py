@@ -67,6 +67,7 @@ def u(x): return hex(x)[2:].rjust(64, '0')
 POW = []
 def build(a, abi):
     starts, frees = [], []; POW.clear()
+    powish = any(f.get('type') == 'error' and re.search(r'solution|nonce|pow|difficulty|hash|target', f.get('name', ''), re.I) for f in abi or [])
     for f in abi or []:
         if f.get('type') != 'function': continue
         n = f['name']; ins = [i['type'] for i in f['inputs']]; m = f.get('stateMutability')
@@ -75,7 +76,7 @@ def build(a, abi):
             starts.append(n)
         if m == 'nonpayable' and GOOD.search(n) and not BAD.search(n):
             # 2026-11-09 StonkChain 教训：mintEgg(nonce, referrer) 是解题型（keccak(seed,nonce) ≤ target），填 1 必失败
-            if any(re.search(r'nonce|solution|proof|sig|answer', i.get('name') or '', re.I) for i in f['inputs']):
+            if any(re.search(r'nonce|solution|proof|sig|answer|salt|seed', i.get('name') or '', re.I) for i in f['inputs']) or (powish and 'uint256' in ins):
                 POW.append(n); continue
             s = '0x' + sel(f"{n}({','.join(ins)})")
             if ins == []: frees.append((n, s))
@@ -96,6 +97,10 @@ def build(a, abi):
 
 def fire(a, frees, start):
     while time.time() < start - 1: time.sleep(0.2)
+    try:
+        if int(rpc('eth_call', [{'to': a, 'data': '0x' + sel('opened()')}, 'latest']), 16) == 1:
+            ev({'contract': a, 'stage': 'skip_opened', 'why': '开火时已开池'}); return
+    except Exception: pass
     done = set(); t_end = max(start, time.time()) + 180
     ev({'contract': a, 'stage': 'armed_fire', 'start': start})
     procs = []
@@ -136,6 +141,10 @@ def main():
         ev({'contract': a, 'stage': 'fire_alive', 'pid': os.getpid()})
         if not p or not p.get('frees'):
             ev({'contract': a, 'stage': 'fire_error', 'why': '读不到排期'}); return
+        import signal
+        def _term(sig, frm):
+            ev({'contract': a, 'stage': 'fire_error', 'why': f'开火进程被系统信号 {sig} 终止'}); os._exit(1)
+        for _s in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT): signal.signal(_s, _term)
         try:
             fire(a, [tuple(x) for x in p['frees']], p['start'])
         except Exception as e:
@@ -162,8 +171,18 @@ def main():
             elif time.time() - p['spawned_at'] > 30 and p.get('respawns', 0) < 2:
                 p['respawns'] = p.get('respawns', 0) + 1; p['fired'] = None
                 ev({'contract': a, 'stage': 'respawn', 'n': p['respawns']})
+        if p and p.get('alive_ok') and not p.get('lost_reported') and p.get('respawns', 0) < 2 and time.time() < max(p.get('start', 0), p['spawned_at']) + 240:
+            try:
+                tail = open(EV).readlines()[-800:]
+                pid = max((json.loads(l).get('pid', 0) for l in tail if f'"{a}"' in l and 'fire_alive' in l), default=0)
+                term = any(f'"{a}"' in l and any(k in l for k in ('"result"', 'not_open_or_reverted', 'fire_error', 'skip_opened')) for l in tail)
+                dead = pid and not os.path.exists(f'/proc/{pid}')
+            except Exception: dead = term = False
+            if dead and not term:
+                p['respawns'] = p.get('respawns', 0) + 1; p['fired'] = None; p['alive_ok'] = False
+                ev({'contract': a, 'stage': 'respawn', 'n': p['respawns'], 'why': f'开火进程 {pid} 消失'})
         if p and p.get('spawned_at') and not p.get('lost_reported') and time.time() > max(p.get('start', 0), p['spawned_at']) + 400:
-            try: got = any(f'"{a}"' in l and ('"result"' in l or 'not_open_or_reverted' in l or 'fire_error' in l) for l in open(EV).readlines()[-800:])
+            try: got = any(f'"{a}"' in l and ('"result"' in l or 'not_open_or_reverted' in l or 'fire_error' in l or 'skip_opened' in l) for l in open(EV).readlines()[-800:])
             except Exception: got = True
             p['lost_reported'] = True
             if not got: ev({'contract': a, 'stage': 'fire_lost', 'why': '开火进程中途消失，没有任何结果'})
