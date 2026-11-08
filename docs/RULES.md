@@ -630,3 +630,10 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 2026-11-06 18:45 用户原话「全部授权应该是临时用的 用完取消才对」：所有代币授权用完即撤；approvals_watch 每轮把上一轮已存在的授权自动 revoke（约 10 分钟后）。当日已撤主 AGC/USDT→Binance Wallet(0xb300…028d，USDT 为无限额)、主 USDT→0xC069/0x3643、001/002 USDT→0xD6aF。
 - 2026-11-07 00:21 用户「a能赚就继续打」：refundmine 打 A 前按现价报价，奖励换 BNB ≤5e13 wei（约 0.035U，一轮 gas）的号跳过（a_unprofitable）。备份 refundmine.py.bak_1107。
 - 2026-11-07 01:35 用户「打 先打主 然后走主的邀请码再打」：AGD（0x9a46…6bac）A 档 agd_mint.py（主 referrer=0，其余 referrer=主）；agd_claim.py 24h 到期 claimA 并全卖（discoverd 每轮调用）。只今天这一轮打，之后每天打需用户确认。
+- 学习笔记 2026-11-07：对方工具 v0.5.0（钱包整体盈亏、掉线补领、免费币开盘先卖一半后分档止盈、付费NFT默认只出简报）。均为交易/账务侧，不涉及发现来源；未采纳。建议用户考虑：付费NFT仅简报（我们已不自动付费）；免费币开盘先卖一半属放宽授权范围外，需用户决定。
+
+## 报价型 mint（2026-11-08 22:33 用户原话「要」）
+- 每轮巡逻跑 `timeout 115 python3 $AIDBOT_HOME/quote-racer/quote_watch.py`；alerts 非空当轮单发「⚠️ 需处理」，原样贴，段尾「回复：打 + 项目」。只提醒不自动买（付费，须用户当场确认）。
+- 用户回复「打」后立刻：`python3 $AIDBOT_HOME/quote-racer/racer.py --to <CA> --price <BNB单价> --qty <每号份数> --ok "<原话>" 主 001 002 海贼王 蜡笔小新 高`（background），源码未验证的须用户原话含「破例 + 该项目」才可启动（「打」不能代替破例，规则 B 不变）；已验证的按「打」启动。六号并发、每轮读新 totalMinted。
+- 局限：baw 预演约 1s+执行再模拟，热盘（≥50 份/分钟）胜率低；越早越好。
+- 2026-11-08 22:44 预授权（用户「要」「按照这次来」）：quote_watch 发现源码已验证（verify_source.py，代理实现也须验证）的报价型盘 → 自动拉起 racer.py --auto，每号份数 = min(0.03 BNB, quota.budget 余额×0.97) ÷ BASE_PRICE；未开售时每 620s 重拉；成交记 autofill.json 计入额度；race_*.log 新成交/回滚进 quote_watch alerts 当轮单发。未验证只提醒。

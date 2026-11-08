@@ -64,6 +64,8 @@ alert = [{'step': n, 'rounds': c, 'last_err': last.get(n, '')} for n, c in strea
 json.dump({'streak': streak, 'last_err': last, 'alert': alert}, open(F, 'w'), ensure_ascii=False, indent=1)
 print('fail_streak alert(自检前):', json.dumps(alert, ensure_ascii=False))
 PY
+# 2026-11-08 用户「要」：报价型 mint（FLOKI 模板）早发现早报
+( s=$(date +%s); timeout 115 python3 $AIDBOT_HOME/quote-racer/quote_watch.py > $O/quote_watch.json 2>$O/quote_watch.err; echo "quote_watch(报价型) exit=$? 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
 # 2026-11-02：某步连续 3 轮失败（第 3/6/9… 轮）自动自检修复一次：节点体检 + 清冷却 + 缩小范围重跑，成功就覆盖输出并清零；仍失败才进 alert
 ( s=$(date +%s); cd $D && timeout 130 python3 selfheal.py "$O" > $O/selfheal.out 2>&1; echo "selfheal(自检) exit=$? 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
 python3 -c "import json,sys;print('fail_streak alert:', json.dumps(json.load(open(sys.argv[1])).get('alert', []), ensure_ascii=False))" "$O/fail_streak.json" 2>/dev/null

@@ -46,7 +46,12 @@ def allowance(o, s): return int(rpc('eth_call', [{'to': USDT, 'data': '0xdd62ed3
 
 def baw(a, args, t=150):
     env = dict(os.environ, HOME=a['home'], npm_config_cache='/tmp/npmcache')
-    r = subprocess.run([B] + args + ['--json'], env=env, capture_output=True, text=True, timeout=t)
+    cmd = [B]
+    if UNV:  # 用户当场破例（--unverified-ok 原话）：绕过 wrapper 的规则 B 闸，直接调 baw，其余预演闸门照旧
+        iid = os.path.join(a['home'], 'instance_id')
+        if os.path.exists(iid): env['BINANCE_INSTANCE_ID'] = open(iid).read().strip()
+        cmd = ['node', '$AIDBOT_HOME/baw/node_modules/@binance/agentic-wallet/dist/index.js']
+    r = subprocess.run(cmd + args + ['--json'], env=env, capture_output=True, text=True, timeout=t)
     try: return json.loads(r.stdout)
     except Exception: return {'success': False, 'raw': (r.stdout + r.stderr)[:300]}
 
