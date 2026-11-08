@@ -107,6 +107,12 @@ for i, a in enumerate(live):
     pct = round(100 * sold / cap, 1)
     if pct >= 100: v['done'] = True; continue
     if pct >= 60 and not v.get('alert60'):
+        # 2026-11-09 PUPPETCAT 教训：已 launched/已开池的铸造已关闭，不再提醒
+        try:
+            lr = chain.call(a, chain.sel('launched()'))
+            if isinstance(lr, (list, tuple)): lr = lr[1] if len(lr) > 1 else lr[0]
+            if isinstance(lr, str) and len(lr) == 66 and int(lr, 16) == 1: v['done'] = True; continue
+        except Exception: pass
         v['alert60'] = int(now)
         try: nm = chain.dec_str(chain.call(a, chain.sel('name()'))[1]) or '未命名'
         except Exception: nm = '未命名'

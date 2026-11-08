@@ -21,6 +21,7 @@ from codeutil import sel
 PLAN = 'salearm_plan.json'; EV = 'discover_out/salearm_events.jsonl'
 EARLY_SPAWN = 900; LATE_FIRE = 6 * 3600
 ACCTS = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+ACCTS.sort(key=lambda x: 0 if x['label'] == '主' else 1)   # 2026-11-09 用户「主先打」：主永远第一个探测、第一个发
 BAD = re.compile(r'sponsor|referr|invite|commission|rebate|dividend|owed|release|vest|stake|fee|withdraw|owner|refund|admin|set|pause|rescue|sweep|transfer|approve|burn|pull|pay|sell|redeem|snapshot|upgrade|renounce|init', re.I)
 GOOD = re.compile(r'free|gift|claim|airdrop|mint', re.I)
 STARTN = re.compile(r'start|open|launch|begin', re.I)
@@ -63,14 +64,19 @@ def abi_of(a):
 def u(x): return hex(x)[2:].rjust(64, '0')
 
 
+POW = []
 def build(a, abi):
-    starts, frees = [], []
+    starts, frees = [], []; POW.clear()
     for f in abi or []:
         if f.get('type') != 'function': continue
         n = f['name']; ins = [i['type'] for i in f['inputs']]; m = f.get('stateMutability')
-        if m in ('view', 'pure') and not ins and STARTN.search(n) and f.get('outputs') and f['outputs'][0]['type'].startswith('uint'):
+        # 2026-11-09：openTime/openBlockNumber 这类是「已开池时间」，不是开售时间
+        if m in ('view', 'pure') and not ins and STARTN.search(n) and not re.search(r'^open(Time|Block|edAt|BlockNumber)$', n) and f.get('outputs') and f['outputs'][0]['type'].startswith('uint'):
             starts.append(n)
         if m == 'nonpayable' and GOOD.search(n) and not BAD.search(n):
+            # 2026-11-09 StonkChain 教训：mintEgg(nonce, referrer) 是解题型（keccak(seed,nonce) ≤ target），填 1 必失败
+            if any(re.search(r'nonce|solution|proof|sig|answer', i.get('name') or '', re.I) for i in f['inputs']):
+                POW.append(n); continue
             s = '0x' + sel(f"{n}({','.join(ins)})")
             if ins == []: frees.append((n, s))
             elif ins == ['uint256']: frees.append((n + '(1)', s + u(1)))
@@ -156,6 +162,11 @@ def main():
             elif time.time() - p['spawned_at'] > 30 and p.get('respawns', 0) < 2:
                 p['respawns'] = p.get('respawns', 0) + 1; p['fired'] = None
                 ev({'contract': a, 'stage': 'respawn', 'n': p['respawns']})
+        if p and p.get('spawned_at') and not p.get('lost_reported') and time.time() > max(p.get('start', 0), p['spawned_at']) + 400:
+            try: got = any(f'"{a}"' in l and ('"result"' in l or 'not_open_or_reverted' in l or 'fire_error' in l) for l in open(EV).readlines()[-800:])
+            except Exception: got = True
+            p['lost_reported'] = True
+            if not got: ev({'contract': a, 'stage': 'fire_lost', 'why': '开火进程中途消失，没有任何结果'})
         if p and (p.get('fired') or p.get('skip_until', 0) > time.time()): continue
         if p and p.get('start') and p.get('frees'):
             pass
@@ -166,6 +177,13 @@ def main():
             if vs is not True:
                 plan[a] = {'skip_until': time.time() + 1800, 'why': 'unverified'}; continue
             t, frees = build(a, abi_of(a))
+            try: opened = int(rpc('eth_call', [{'to': a, 'data': '0x' + sel('opened()')}, 'latest']), 16) == 1
+            except Exception: opened = False
+            if opened:
+                plan[a] = {'skip_until': time.time() + 6 * 3600, 'why': 'already_opened'}; ev({'contract': a, 'stage': 'skip_opened'}); continue
+            if POW and not frees:
+                plan[a] = {'skip_until': time.time() + 6 * 3600, 'why': 'pow_needs_solver', 'pow': list(POW)}
+                ev({'contract': a, 'stage': 'pow_needs_solver', 'fns': list(POW), 'start': t}); continue
             if not t or not frees:
                 plan[a] = {'skip_until': time.time() + 6 * 3600, 'why': 'no_start_or_free', 'frees': frees}; continue
             plan[a] = {'start': t, 'frees': frees, 'start_cst': time.strftime('%m-%d %H:%M:%S', time.gmtime(t + 8 * 3600))}
