@@ -561,6 +561,10 @@ def daemon():
                 try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/gastopup.lock timeout 200 python3 gas_topup.py >> {OUTD}/gas_topup.log 2>&1'], start_new_session=True,
                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 except Exception: pass
+            # 2026-11-10 19:51 用户「到60% 立马打满」：用户点名项目的进度门槛预埋（userarm.json，逐项授权）
+            try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/userarm.lock timeout 600 python3 userarm.py >> {OUTD}/userarm.log 2>&1'], start_new_session=True,
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception: pass
             # 2026-11-03 02:08 用户「要」：开售定时预埋免费份
             try: subprocess.Popen(['bash', '-c', f'cd {L} && flock -n /tmp/salearm.lock timeout 110 python3 salearm.py >> {OUTD}/salearm.log 2>&1'], start_new_session=True,
                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
