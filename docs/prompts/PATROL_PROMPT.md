@@ -36,6 +36,8 @@ RPC 限流：余额或链上查询遇到 429/5xx 时换节点重试（bsc-datase
 
 每次运行：
 0. 并行发现（每轮第一步，防止串行超时导致 2b/2c/2d/1f/2e 整轮没跑）：用 shell background 运行 `bash $AIDBOT_DATA/discover_all.sh`，它同时跑 chainscan、sitescan、TG、内盘平台、官网监控、fair mint、opencheck，约 200 秒内全部结束，输出在 discover_out/<步骤>.json，summary.txt 记每步 exit code。等待期间做第 1、1b 步。之后的 1e、1f、2、2b、2c、2d、2e 直接读 discover_out 里对应输出，不再重复运行脚本；某步 exit≠0 或输出为空时，单独重跑该步一次，仍失败就在消息里写步骤名和 .err 最后一行。
+0y. （2026-11-10 用户「为什么没说风险 额度 和链接 和分析」）任何付费盘，哪怕只是「跳过/本轮不买/稍后重读」，也必须逐盘写：名称、合约链接（bscscan）、进度（已售/门槛 与 %）、单价（BNB 与约 U）、每号上限份数与满额花费、合约里的 BNB 余额、主要风险（源码是否验证、owner 特权函数如 withdraw/setPriceWei、资金是否已离开合约）、官网（无则「官网未找到（未确认）」）、结论与原因。多个盘用表格。禁止只报名字+进度。「源码查询失败」只用于查询接口报错，确认未验证要写「源码未验证」；查询失败的当轮先跑 mintcheck.py 重查再发。
+
 0z. （2026-11-10 用户「改」）先读 discover_out/tgfast.json 的 alerts 里 reported=false 的：TG 频道新帖（网址/合约/「进度XX%」）的快速核查结果。live 里有未开池、进度 ≥60% 的付费盘立刻单发完整简报（份数、单价 BNB 与约 U、进度、官网），进度 <60% 合并一行；用户点名「打满」的项目按 APPROVAL 2026-11-10 20:06 规则直接打。报完把 reported 置 true。
 
 1. 会话检查：对 accounts.json 里每个账号目录运行 `$AIDBOT_HOME/baw/safe_session.sh check <目录名>`。CONNECTED 或 UNKNOWN：当作可用。PENDING：跳过，提一句待扫码。UNCONNECTED（脚本已连续 3 次确认）：运行 `safe_session.sh signin <目录名>`，把配对码和 $AIDBOT_DATA/qr_<目录名>.png 交给用户，提醒该账号先在币安 App 切到对应账号再扫；该账号本轮不交易，其余继续。用户扫码后用 `safe_session.sh verify <目录名>` 核对 agentId。
