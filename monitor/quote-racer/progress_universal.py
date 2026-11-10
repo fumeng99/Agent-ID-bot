@@ -22,15 +22,15 @@ N = lambda s: re.sub(r'[^a-z0-9]', '', s.split('(')[0].lower())
 
 R_SOLD = re.compile(r'^(totalminted|minted|mintedcount|mintcount|totalmints|totalmintcount|totalsold|sold|soldcount|sharesminted|sharessold|'
                     r'mintedshares|soldshares|totalsharesminted|totalsharessold|totalpaidshares|paidshares|unitssold|totalunitssold|'
-                    r'totalpurchased|purchased|totalbought|currentsupply|mintedsupply|totalissued|issued|nexttokenid|currentindex|totalclaimed)$')
+                    r'paidminted|totalpaidminted|lotssold|soldlots|mintedlots|totalpurchased|purchased|totalbought|currentsupply|mintedsupply|totalissued|issued|nexttokenid|currentindex|totalclaimed)$')
 R_SOLD_WEAK = re.compile(r'^totalsupply$')
 R_CAP = re.compile(r'^(openat|openunits|openshares|opencount|openthreshold|launchat|launchthreshold|launchshares|graduationshares|'
                    r'graduationthreshold|gradthreshold|maxshares|maxmints|maxunits|liquiditytargetshares|targetshares|targetunits|'
                    r'salecap|hardcapshares|hardcap|mintcap|maxmintsupply|maxsale|salesupply|presalesupply|presaleshares|fairmintsupply|'
-                   r'publicsupply|maxpublic|totalforsale|sharesforsale|unitsforsale|poolthreshold|opensupply)$')
+                   r'maxlots|maxpaidlots|paidlots|totallots|lotcap|publicsupply|maxpublic|totalforsale|sharesforsale|unitsforsale|poolthreshold|opensupply)$')
 R_CAP_WEAK = re.compile(r'^(maxsupply|cap|maxmint|totalshares|totalsupplycap|maxtokens|maxtotalsupply|collectionsize|supplycap|maxcount|maxtokenid)$')
-R_CAP_GEN = re.compile(r'^(?!.*(per|wallet|tx|address|agent|id$|duration|delay|window|blocks|fee|bps|price|reward))(.*(max|cap|target|limit|threshold).*(share|mint|unit|sale|supply|slot|seat|egg|ticket|spot).*|.*(share|mint|unit|sale|slot|seat|egg|ticket|spot).*(max|cap|target|limit|threshold|total).*)$')
-R_PRICE0 = re.compile(r'^(price|baseprice|mintprice|cost|mintcost|pricepershare|shareprice|unitprice|pricepermint|publicprice|saleprice|'
+R_CAP_GEN = re.compile(r'^(?!.*(per|wallet|tx|address|agent|id$|duration|delay|window|blocks|fee|bps|price|reward))(.*(max|cap|target|limit|threshold).*(share|mint|unit|sale|supply|slot|seat|egg|ticket|spot|lot).*|.*(share|mint|unit|sale|slot|seat|egg|ticket|spot|lot).*(max|cap|target|limit|threshold|total).*)$')
+R_PRICE0 = re.compile(r'^(price|baseprice|lotprice|priceperlot|mintprice|cost|mintcost|pricepershare|shareprice|unitprice|pricepermint|publicprice|saleprice|'
                       r'priceperunit|currentprice|getprice|mintfee|fee|pricewei|sharepricewei)$')
 R_PRICE1 = re.compile(r'^(costof|priceof|bnbquote|quote|getcost|getmintprice|pricefor|costfor|quotemint|mintcost|getprice|totalcost)$')
 R_OPEN = re.compile(r'^(opened|launched|poolopen|ispoolopen|poolopened|finalized|liquidityadded|liquiditytargetreached|graduated|'
@@ -55,6 +55,7 @@ def sources():
     for a in load(f'{LM}/newtpl_state.json', {}): add(a, 'newtpl')
     for a in load(f'{LM}/refundmine_state.json', {}): add(a, 'refundmine')
     for a in (load(QW, {}).get('pw') or {}): add(a, 'pw')
+    for a in (load(f'{LM}/fairmint/generic_mint.json', {}) or {}): add(a, 'generic')  # 2026-11-10 PEPE AGENT 漏报兜底
     return out
 
 

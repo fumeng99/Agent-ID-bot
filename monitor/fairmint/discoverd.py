@@ -266,8 +266,25 @@ def handle_logs(ctx, logs, backfill=False, source_prefix=''):
             judge(ctx, a, fc, newc[a], backfill, source_prefix + 'deploy_event')
 
 
+GENERIC_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'generic_mint.json')
+# 2026-11-10 PEPE AGENT 0x96b2…0945 漏报：代币自带铸造（mint 5 参、totalMinted/paidMinted/MAX_PAID_LOTS、identity() 间接认 Agent ID），
+# 不是 Jager Minted / OPEN_SELS / TRIO / 代码内 REG，judge 静默丢弃。兜底：新合约码里有「已售计数」选择器就交给 progress_universal 读进度。
+SOLD_SELS = ['63' + CU.sel(x) for x in ('totalMinted()', 'paidMinted()', 'mintedCount()', 'totalSold()', 'sharesMinted()', 'totalMints()', 'soldCount()', 'unitsSold()', 'totalPurchased()')]
+def note_generic(a, blk, source, deployer=None):
+    try: g = json.load(open(GENERIC_OUT))
+    except Exception: g = {}
+    if a in g: return
+    g[a] = {'at': time.time(), 'time_cst': now_cst(), 'block': blk, 'source': source, 'deployer': deployer}
+    if len(g) > 3000:
+        for k in sorted(g, key=lambda k: g[k].get('at', 0))[:len(g) - 3000]: g.pop(k)
+    tmp = GENERIC_OUT + '.tmp'; json.dump(g, open(tmp, 'w')); os.replace(tmp, GENERIC_OUT)
+
+
 def judge(ctx, a, fc, blk, backfill, source, deployer=None, nonce=None):
     reg = CU.REG in fc
+    if any(x in fc for x in SOLD_SELS):
+        try: note_generic(a, blk, source, deployer)
+        except Exception as e: log(f'generic_mint 写失败 {a}: {e}')
     if fm_like(fc) and (reg or F.TOPICS[0][2:] in fc or fm_trio(fc)):
         ex = {'agentid_registry_in_code': reg}
         if deployer: ex.update({'deployer': deployer, 'deploy_nonce': nonce})

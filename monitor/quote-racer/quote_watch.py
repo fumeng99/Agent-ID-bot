@@ -6,6 +6,7 @@ sys.path.insert(0, '$AIDBOT_HOME/bsc-mint-skill'); import chain
 LM = '$AIDBOT_DATA'; ST = '$AIDBOT_HOME/quote-racer/quote_watch_state.json'
 st = json.load(open(ST)) if os.path.exists(ST) else {'checked': {}, 'hits': {}}
 SIGS = ('b915daf5', 'ae3dfa28', '760b22a2')
+LOT_SELS = [chain.sel(x)[2:] for x in ('MAX_LOTS()', 'MAX_PAID_LOTS()', 'TOKENS_PER_LOT()')]
 files = glob.glob(LM + '/discover_out/*.json') + glob.glob(LM + '/discover_out/*.jsonl') + glob.glob(LM + '/chainscan/*.json') + glob.glob(LM + '/fairmint/*.json')
 addrs = set()
 now = time.time()
@@ -16,14 +17,20 @@ for f in files:
     except Exception: pass
 # 2026-11-08 23:18 用户「这种付费的只要进度到60%就提醒我」：所有能读出 已售/上限/单价 的付费 mint 合约进监控表 pw，进度首次 ≥60% 必报一次
 def _s(x): return chain.sel(x)[2:]
-SOLD_F = ['totalMinted()', 'totalSupply()', 'minted()', 'totalSold()', 'sold()']
+SOLD_F = ['paidMinted()', 'totalMinted()', 'totalSupply()', 'minted()', 'totalSold()', 'sold()']
 # 2026-11-09 00:35 DOG(0xe996) 漏报：小写 openAt()/costOf(uint256) 克隆读不到；开池门槛优先于总供应
-CAP_F = ['OPEN_AT()', 'openAt()', 'OPEN_UNITS()', 'openUnits()', 'MAX_SHARES()', 'maxSupply()', 'MAX_SUPPLY()', 'cap()', 'maxMint()', 'MAX_MINT()', 'TOTAL_SUPPLY()']
+CAP_F = ['MAX_PAID_LOTS()', 'MAX_LOTS()', 'OPEN_AT()', 'openAt()', 'OPEN_UNITS()', 'openUnits()', 'MAX_SHARES()', 'maxSupply()', 'MAX_SUPPLY()', 'cap()', 'maxMint()', 'MAX_MINT()', 'TOTAL_SUPPLY()']
 PRICE_F = ['BASE_PRICE()', 'PRICE()', 'price()', 'mintPrice()', 'MINT_PRICE()', 'cost()', 'getPrice()', 'pricePerShare()', 'bnbQuote(uint256)', 'costOf(uint256)', 'priceOf(uint256)']
 ARG1 = '%064x' % 1
 def cd(f): return chain.sel(f) + (ARG1 if f.endswith('(uint256)') else '')
 SOLD = [_s(x) for x in SOLD_F]; CAPS = [_s(x) for x in CAP_F]; PRICES = [_s(x) for x in PRICE_F]
-new = [a for a in addrs if a not in st['checked'] and a not in st['hits']][:300]
+# 2026-11-10 PEPE AGENT 漏报：①地址只在大状态文件前部、且 set 随机取 300 个，永远轮不到 → discoverd 兜底表 generic_mint.json 最新的优先；
+_gen = json.load(open(LM + '/fairmint/generic_mint.json')) if os.path.exists(LM + '/fairmint/generic_mint.json') else {}
+_pri = [a for a in sorted(_gen, key=lambda k: -_gen[k].get('at', 0)) if now - _gen[a].get('at', 0) < 48 * 3600]
+addrs |= set(_pri)
+new = [a for a in _pri if a not in st['checked'] and a not in st['hits']]
+new += [a for a in addrs if a not in st['checked'] and a not in st['hits'] and a not in new]
+new = new[:300]
 def code_of(a):
     c = chain.rpc('eth_getCode', [a, 'latest'])
     h = c[2:].lower()
@@ -53,7 +60,8 @@ for a in new:
     try:
         c = code_of(a)
         st['checked'][a] = int(now)
-        if len(c) > 200 and sum(s in c for s in SIGS) >= 2: st['hits'][a] = {'first': int(now), 'last_pct': -100}
+        if len(c) > 200 and (sum(s in c for s in SIGS) >= 2 or (SIGS[1] in c and any(x in c for x in LOT_SELS))):  # ②PEPE AGENT 变体只有 mint 0xae3dfa28 + MAX_LOTS，无 StaleQuote/mintWithInviter
+            st['hits'][a] = {'first': int(now), 'last_pct': -100}
         elif len(c) > 200 and any(x in c for x in SOLD) and any(x in c for x in CAPS) and any(x in c for x in PRICES):
             st.setdefault('pw', {})[a] = {'first': int(now)}
     except Exception: pass

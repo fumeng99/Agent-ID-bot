@@ -8,7 +8,7 @@ CASES = {  # 地址: (期望 cap_src, 说明)
     '0x74d9b5477e7fa818298f927966452f2eb9c5fa5e': ('MAX_MINTS()', 'Proof of AGI BossMint'),
     '0x50b0052cc11911654939b0cc4515160009493e2d': ('maxSupply()', 'PUPPETCAT maxSupply'),
     '0xa9ecbd052941c9e310e68525aa62671729b84446': ('MAX_SUPPLY()', 'ERC721 minted/MAX_SUPPLY'),
-    '0x9b6187d2aba9f7c93aa986dd48cb2b2fe5b3db99': (None, 'FLOKI 上限是常量：读不出，靠热盘「进度读不出」提醒 + quote_watch'),
+    '0x9b6187d2aba9f7c93aa986dd48cb2b2fe5b3db99': ('MAX_LOTS()', 'FLOKI MAX_LOTS（11-10 加 lot 词后可读，PEPE AGENT 同模板）'),
 }
 ok = 0
 for a, (want, note) in CASES.items():
