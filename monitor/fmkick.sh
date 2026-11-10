@@ -51,3 +51,11 @@ for spec in "fastprogress.py --daemon:discover_out/fp_daemon.pid" "possell.py --
   pids=$(pgrep -f "^python3 $pat" || true); n=$(echo "$pids" | grep -c . || true)
   if [ "${n:-0}" -gt 1 ] && [ -n "$keep" ]; then for p in $pids; do [ "$p" != "$keep" ] && kill "$p" 2>/dev/null; done; echo "{\"dedup\":\"$pat\",\"had\":$n,\"kept\":$keep}"; fi
 done
+# 2026-11-10 用户「改」（PEPE AGENT 漏报）：TG 快速通道 tgfast.py 常驻，每 15 秒拉频道，新帖带网址/合约/「进度XX%」立刻扫官网读进度
+hb=$(python3 -c "import json,time;print(int(time.time()-json.load(open('discover_out/tgfast_hb.json')).get('heartbeat',0)))" 2>/dev/null || echo 999)
+if [ "$hb" -lt 120 ]; then echo "{\"tgfast\":\"running\",\"heartbeat_age_s\":$hb}"
+else
+  pkill -f "^python3 tgfast.py --daemon" 2>/dev/null; sleep 1
+  python3 -c "import subprocess;subprocess.Popen(['bash','-c','cd $AIDBOT_DATA/tg && exec python3 tgfast.py --daemon --every 15 >> ../discover_out/tgfast.log 2>&1'],start_new_session=True,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)"
+  echo "{\"tgfast\":\"started\",\"prev_heartbeat_age_s\":$hb}"
+fi
