@@ -77,7 +77,11 @@ def chain_prices(pairs):
 
 _DS = [0]
 UNPRICED = [False]
+NOLIQ = set()
+
+
 def prices(tokens, pairs=None):
+    NOLIQ.clear()
     out = chain_prices(pairs or {})
     tokens_all = tokens; tokens = [t for t in tokens if t not in out]
     if tokens and time.time() - _DS[0] < 15: return out  # 外部接口限流保护：链上读不到的（未开池/非 WBNB 池）最多 15 秒查一次 DexScreener
@@ -85,6 +89,9 @@ def prices(tokens, pairs=None):
     for i in range(0, len(tokens), 30):
         try: ps = get('https://api.dexscreener.com/latest/dex/tokens/' + ','.join(tokens[i:i + 30])).get('pairs') or []
         except Exception: continue
+        _seen = {str((p.get('baseToken') or {}).get('address', '')).lower() for p in ps}
+        for _t in tokens[i:i + 30]:  # 2026-11-10：接口正常返回但没有 ≥50U 的池 = 池子没流动性了，不是读取失败
+            if _t not in _seen or all(((p.get('liquidity') or {}).get('usd') or 0) < 50 for p in ps if str((p.get('baseToken') or {}).get('address', '')).lower() == _t): NOLIQ.add(_t)
         for p in ps:
             t = str((p.get('baseToken') or {}).get('address', '')).lower(); liq = (p.get('liquidity') or {}).get('usd', 0) or 0
             if p.get('chainId') != 'bsc' or t not in tokens or liq < 50: continue
@@ -169,7 +176,9 @@ def step(st, out):
             if bu: break
         if not bu: out.setdefault('unknown', []).append('BNB/USDT 报价读取失败，本轮付费仓位倍数未判断')
     _miss = [t for t in toks if t not in pr and st.get(t, {}).get('last')]  # 之前读到过价格（已开池）、这轮读不到 = 价格源失败
+    _dead = [t for t in _miss if t in NOLIQ]; _miss = [t for t in _miss if t not in NOLIQ]
     if _miss: out.setdefault('unknown', []).append('价格读取失败：' + '、'.join(pos[t]['name'] or t[:8] for t in _miss[:10]))
+    if _dead: out['no_liquidity'] = [pos[t]['name'] or t[:8] for t in _dead]  # 池子已无流动性（<50U），卖不出，不算读取失败
     dec = dict(zip(toks, batch([('eth_call', [{'to': t, 'data': '0x313ce567'}, 'latest']) for t in toks], tolerant=True)))
     calls = [(t, l) for t in toks if t in pr for l in pos[t]['acc'] if l in LAB]
     bals = batch([('eth_call', [{'to': t, 'data': '0x70a08231' + LAB[l][2:].rjust(64, '0')}, 'latest']) for t, l in calls], tolerant=True) if calls else []

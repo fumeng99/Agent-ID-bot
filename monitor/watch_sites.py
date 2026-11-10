@@ -11,9 +11,10 @@ extra = os.path.join(D, 'watch_sites.txt')
 if os.path.exists(extra): SITES += [l.strip() for l in open(extra) if l.strip() and not l.startswith('#')]
 def grab(site):
     out = {}
-    for p in ['/llms.txt', '/skill.md', '/agent.md', '/deployment.json']:
+    # 2026-11-10 akita.bar：合约地址只在后台接口返回（/api/?action=status 的 contract 字段，上线前为空）→ 接口也纳入比对
+    for p in ['/llms.txt', '/skill.md', '/agent.md', '/deployment.json', '/api/?action=status', '/api/status', '/api/config', '/config.json']:
         try:
-            r = urllib.request.urlopen(urllib.request.Request('https://' + site + p, headers={'user-agent': 'Mozilla/5.0'}), timeout=10)
+            r = urllib.request.urlopen(urllib.request.Request('https://' + site + p, headers={'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36', 'accept': 'application/json, text/plain, */*'}), timeout=10)
             t = r.read(200000).decode('utf8', 'ignore')
             if not t.lstrip().lower().startswith(('<!doctype', '<html', '{"error')): out[p] = t
         except Exception: pass

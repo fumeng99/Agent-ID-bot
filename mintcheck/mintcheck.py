@@ -53,7 +53,7 @@ def fetch(u, t=12, cap=1_500_000):
 
 def from_url(url):
     t = time.time(); base = '{0.scheme}://{0.netloc}'.format(urllib.parse.urlparse(url if '://' in url else 'https://' + url))
-    texts = {}; jobs = [url if '://' in url else 'https://' + url] + [base + p for p in ('/skill.md', '/llms.txt', '/agent.md', '/agents.md', '/.well-known/agent.json', '/api/state', '/api/stats')]
+    texts = {}; jobs = [url if '://' in url else 'https://' + url] + [base + p for p in ('/skill.md', '/llms.txt', '/agent.md', '/agents.md', '/.well-known/agent.json', '/api/state', '/api/stats', '/api/?action=status', '/api/status', '/api/config', '/config.json')]
     def get(u):
         try: return u, fetch(u)
         except Exception: return u, ''

@@ -89,9 +89,17 @@ def plan_many(addrs, plans, t0, limit):
         if time.time() - t0 > limit: return a, None
         try: return a, plan_for(a)
         except Exception as e: return a, {'err': str(e)[:120], 't': int(time.time())}
-    with ThreadPoolExecutor(8) as ex:
-        for a, p in ex.map(one, addrs):
+    # 2026-11-10：原来 with 会等所有已开始的识别做完（openchain/节点慢时一个要几分钟），整轮超 115 秒被杀、没有任何输出。
+    # 改为到时限就不等，没做完的下一轮再识别
+    from concurrent.futures import wait
+    ex = ThreadPoolExecutor(8); fs = [ex.submit(one, a) for a in addrs]
+    done, _ = wait(fs, timeout=max(1, limit - (time.time() - t0)))
+    for f in done:
+        try:
+            a, p = f.result()
             if p is not None: plans[a] = p
+        except Exception: pass
+    ex.shutdown(wait=False, cancel_futures=True)
 
 
 def backfill(limit=1100):

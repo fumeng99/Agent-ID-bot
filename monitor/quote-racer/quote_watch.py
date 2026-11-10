@@ -32,7 +32,24 @@ def code_of(a):
         impl = '0x' + chain.rpc('eth_getStorageAt', [a, '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc', 'latest'])[-40:]
         c = chain.rpc('eth_getCode', [impl, 'latest'])
     return c
+# 2026-11-10：原来 300 个新地址逐个串行读代码，节点慢时一轮超 115 秒被杀、整个报价型监控和 progress_universal 一直没输出。
+# 改为先并发批量 eth_getCode（代理/克隆再单独追），并限总预算 35 秒，剩下的下一轮再看。
+_T0 = time.time()
+_pre = {}
+try:
+    _rs = chain.batch([('eth_getCode', [a, 'latest']) for a in new], chunk=20)
+    for a, c in zip(new, _rs):
+        if isinstance(c, str): _pre[a] = c
+except Exception: pass
+_code_of_raw = code_of
+def code_of(a):
+    c = _pre.get(a)
+    if c is None: return _code_of_raw(a)
+    h = c[2:].lower()
+    if (h.startswith('363d3d373d3d3d363d73') and len(h) >= 60) or (len(c) < 400 and '360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc' in c): return _code_of_raw(a)
+    return c
 for a in new:
+    if time.time() - _T0 > 35: break
     try:
         c = code_of(a)
         st['checked'][a] = int(now)
@@ -147,3 +164,6 @@ try:
     sys.stderr.write('progress_universal ' + json.dumps({k: v for k, v in _pu.items() if k != 'alerts'}) + '\n')
 except Exception as _e: sys.stderr.write('progress_universal err ' + str(_e)[:200] + '\n')
 print(json.dumps({'scanned': len(new), 'hits': len(st['hits']), 'alerts': alerts}, ensure_ascii=False))
+
+# 2026-11-10：识别线程超时后仍在后台跑，正常退出会等它们 → 输出后直接结束进程
+sys.stdout.flush(); sys.stderr.flush(); os._exit(0)

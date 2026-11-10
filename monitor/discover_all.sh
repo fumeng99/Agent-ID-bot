@@ -6,7 +6,7 @@ bash $AIDBOT_DATA/fmkick.sh > $AIDBOT_DATA/discover_out/fmkick.json 2>&1  # 2026
 # 2026-11-01 学  v2.5.0「只允许一份在跑」：两轮重叠会同时写 state.json/found.json（chainscan 曾写坏过 state）。已有一份在跑就直接退出，沿用它的输出。
 exec 9>/tmp/discover_all.lock
 if ! flock -n 9; then echo "discover_all 已有一份在跑：等它跑完（≤220 秒）直接用它的输出，不重复启动"; flock -w 220 9; cat $AIDBOT_DATA/discover_out/summary.txt 2>/dev/null; exit 0; fi
-D=$AIDBOT_DATA; O=$D/discover_out; mkdir -p "$O"; find "$O" -maxdepth 1 -type f \( -name '*.json' -o -name '*.err' -o -name summary.txt \) ! -name fail_streak.json ! -name newtpl.json ! -name newtpl_autofill_trig.json ! -name fp_live.json ! -name possell_live.json ! -name possell_daemon_out.json ! -name possell_reported.json ! -name autofill_fast.json ! -name notify_last_sent.json ! -name '*_reported.json' ! -name '*_state.json' ! -name '*_live.json' ! -name '*_hb.json' ! -name '*_announce.json' -delete  # 2026-11-09：salearm_reported.json 每轮被删 → 开售定时重复提醒  # 2026-11-01 20:50：常驻进程的心跳/未汇报卖出结果和失败计数不再每轮删掉  # 2026-11-10 PIG：newtpl.json 每轮被删 → 新模板进度从不刷新、60% 不触发
+D=$AIDBOT_DATA; O=$D/discover_out; mkdir -p "$O"; rm -f "$O/summary.txt"; date +%s > "$O/.round_t0"  # 2026-11-10 PIG 根因：原来每轮 find -delete 删掉 discover_out 下几乎所有 json（含 newtpl.json、autofill_recheck.json、hotfree.json 等别的进程还要读的状态）→ 改为不删，各步原子替换；本轮没更新的输出由下面 fail_streak 按 mtime 判失败
 run() { # name timeout dir cmd...
   local n=$1 t=$2 dir=$3; shift 3
   # 2026-11-03：先写 .run 临时文件再原子替换（原来 > 直接截断，fairmint.json 每轮约 110 秒是空文件，autofill 这时读到空 = 漏掉 ≥60% 的盘）；输出为空则保留上一轮
@@ -28,10 +28,10 @@ run claimscan 110 $D python3 claimscan.py 80  # 可领取奖励（只读）
 run mixedfree 110 $D env MF_BUDGET=95 python3 mixedfree.py --scan  # 2026-11-02 用户「前面免费 后面付费的也不打」：混合盘免费份（数量 0 / claimFree 等）只读探测，按上次检查时间轮转；领取由巡逻 --from-out --mint 做
 wait
 # 免费候选预检：依赖 chainscan 结果，所以放在 wait 之后
-( s=$(date +%s); cd $D && timeout 100 python3 precheck.py > $O/precheck.json 2> $O/precheck.err; echo "precheck exit=$? 100s上限 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
+( s=$(date +%s); cd $D && timeout 100 python3 precheck.py > $O/precheck.json.run 2> $O/precheck.err; rc=$?; [ -s $O/precheck.json.run ] && mv -f $O/precheck.json.run $O/precheck.json; echo "precheck exit=$rc 100s上限 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
 # 2026-11-01 审计：开池进度高频检查（只读 eth_call，5 秒左右）：跨 30/60/70%、提前开池、速度/预计到 70% 分钟数、待预审列表
 # 2026-11-01 20:50：未验证但很热的免费盘（30 分钟 ≥50 钱包、value=0、规则 B 跳过）→ hotfree.json，巡逻放「⚠️ 需处理」问是否破例（每项目一次）
-( s=$(date +%s); cd $D && timeout 100 python3 hotfree_unverified.py > $O/hotfree.json 2> $O/hotfree.err; echo "hotfree exit=$? 100s上限 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
+( s=$(date +%s); cd $D && timeout 100 python3 hotfree_unverified.py > $O/hotfree.json.run 2> $O/hotfree.err; rc=$?; [ -s $O/hotfree.json.run ] && mv -f $O/hotfree.json.run $O/hotfree.json; echo "hotfree exit=$rc 100s上限 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
 # 2026-11-01 20:50：fastprogress 自带看门狗（32 秒输出上一轮安全结果）；last 只由它自己在成功时写。外层仍超时/空输出 → 用上一轮结果兜底并标 stale，不留空文件
 ( s=$(date +%s); cd $D/fairmint && timeout 40 python3 fastprogress.py > $O/fastprogress.json 2> $O/fastprogress.err; rc=$?
   if ! python3 -c "import json,sys;json.load(open(sys.argv[1]))" $O/fastprogress.json 2>/dev/null; then
@@ -51,6 +51,9 @@ for ln in open(os.path.join(O, 'summary.txt')):
     n, rc = m.group(1), int(m.group(2)); out = os.path.join(O, n + '.json'); ok = rc == 0
     try: json.load(open(out))
     except Exception: ok = False
+    try:  # 2026-11-10：不再每轮删输出，本轮没刷新（mtime 早于本轮开始）= 失败
+        if os.path.getmtime(out) < int(open(os.path.join(O, '.round_t0')).read()) - 5: ok = False
+    except Exception: pass
     if ok: streak[n] = 0; last.pop(n, None)
     else:
         streak[n] = streak.get(n, 0) + 1
@@ -65,7 +68,23 @@ json.dump({'streak': streak, 'last_err': last, 'alert': alert}, open(F, 'w'), en
 print('fail_streak alert(自检前):', json.dumps(alert, ensure_ascii=False))
 PY
 # 2026-11-08 用户「要」：报价型 mint（FLOKI 模板）早发现早报
-( s=$(date +%s); timeout 115 python3 $AIDBOT_HOME/quote-racer/quote_watch.py > $O/quote_watch.json 2>$O/quote_watch.err; echo "quote_watch(报价型) exit=$? 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
+( s=$(date +%s); timeout 115 python3 $AIDBOT_HOME/quote-racer/quote_watch.py > $O/quote_watch.json.run 2>$O/quote_watch.err; rc=$?; [ -s $O/quote_watch.json.run ] && mv -f $O/quote_watch.json.run $O/quote_watch.json; echo "quote_watch exit=$rc 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
+python3 - "$O" <<'PY'  # 2026-11-10：quote_watch 在失败计数之后才跑，连续超时 30+ 小时没人发现 → 单独计数，连续 3 轮进 alert
+import json, os, re, sys
+O = sys.argv[1]; F = os.path.join(O, 'fail_streak.json')
+try: st = json.load(open(F))
+except Exception: st = {}
+s = st.setdefault('streak', {}); le = st.setdefault('last_err', {})
+rc = next((int(m.group(1)) for m in (re.match(r'quote_watch exit=(\d+)', l) for l in open(os.path.join(O, 'summary.txt'))) if m), 1)
+ok = rc == 0
+try: json.load(open(os.path.join(O, 'quote_watch.json'))); ok = ok and os.path.getmtime(os.path.join(O, 'quote_watch.json')) >= int(open(os.path.join(O, '.round_t0')).read()) - 5
+except Exception: ok = False
+s['quote_watch'] = 0 if ok else s.get('quote_watch', 0) + 1
+if ok: le.pop('quote_watch', None)
+else: le['quote_watch'] = f'exit={rc}' + ('（超时）' if rc == 124 else '')
+st['alert'] = [{'step': n, 'rounds': c, 'last_err': le.get(n, '')} for n, c in s.items() if c >= 3]
+json.dump(st, open(F, 'w'), ensure_ascii=False, indent=1)
+PY
 # 2026-11-02：某步连续 3 轮失败（第 3/6/9… 轮）自动自检修复一次：节点体检 + 清冷却 + 缩小范围重跑，成功就覆盖输出并清零；仍失败才进 alert
 ( s=$(date +%s); cd $D && timeout 130 python3 selfheal.py "$O" > $O/selfheal.out 2>&1; echo "selfheal(自检) exit=$? 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
 python3 -c "import json,sys;print('fail_streak alert:', json.dumps(json.load(open(sys.argv[1])).get('alert', []), ensure_ascii=False))" "$O/fail_streak.json" 2>/dev/null

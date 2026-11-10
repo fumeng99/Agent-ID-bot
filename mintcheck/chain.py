@@ -33,12 +33,22 @@ def _order():
     return good[k:] + good[:k]
 
 
-def _post(u, body, t=10):
+def _post(u, body, t=6):  # 2026-11-10：10→6 秒；代理隧道慢时整体卡死
     r = urllib.request.Request(u, json.dumps(body).encode(), UA)
     return json.load(urllib.request.urlopen(r, timeout=t))
 
 
 def batch(calls, chunk=15, _retry=True):
+    """calls=[(method, params)] -> 结果列表。"""
+    # 2026-11-10：≥20 条纯 eth_call（不带 from/value）→ 走 launch-monitor/rpcpool 的 Multicall3（约 8 倍快，结果一致）；失败项与原来一样返回 {'error': ...}
+    if _retry and len(calls) >= 20 and all(m == 'eth_call' and len(p) == 2 and isinstance(p[0], dict) and set(p[0]) <= {'to', 'data'} and p[1] == 'latest' for m, p in calls):
+        try:
+            import sys as _s
+            if '$AIDBOT_DATA' not in _s.path: _s.path.append('$AIDBOT_DATA')
+            import rpcpool as _rp
+            r = _rp.mcall([(p[0]['to'], p[0]['data']) for _, p in calls], deadline=time.time() + 25)
+            return [x if x is not None else {'error': 'revert_or_unavailable'} for x in r]
+        except Exception: pass
     """calls=[(method, params)] -> 结果列表（单项报错/revert 返回 {'error': ...}）。换节点重试。"""
     parts = [calls[i:i + chunk] for i in range(0, len(calls), chunk)]
     if len(parts) > 1:
@@ -49,7 +59,7 @@ def batch(calls, chunk=15, _retry=True):
     for part in parts:
         body = [{'jsonrpc': '2.0', 'id': j, 'method': m, 'params': p} for j, (m, p) in enumerate(part)]
         res = None
-        for u in _order() * 2:
+        for u in (_order() * 2)[:6]:  # 2026-11-10：最多换 6 个节点（原来 2×全部节点 × 10 秒 = 一次调用可卡数分钟）
             try:
                 STATS['rpc_calls'] += 1
                 r = _post(u, body)
