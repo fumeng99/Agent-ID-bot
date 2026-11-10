@@ -22,7 +22,7 @@ D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D); os.chdir(
 from rpcpool import batch, rpc
 from codeutil import sel, upgradeable, IMPL_SLOT
 
-OUT = 'discover_out/newtpl.json'; EV = 'discover_out/newtpl_events.jsonl'; ST = 'newtpl_state.json'
+OUT = 'discover_out/newtpl.json'; OUT_BAK = 'newtpl_results.json'; EV = 'discover_out/newtpl_events.jsonl'; ST = 'newtpl_state.json'
 LOG_NODES = ['https://rpc-bsc.48.club', 'https://0.48.club']
 HEAT_MIN = 30; WIN_BLOCKS = 4000; RE_ANALYZE = 6 * 3600; RE_UNVER = 1800; RE_COLD = 900
 MAX_ANALYZE = 4; DEADLINE = time.time() + 110  # discoverd 用 timeout 170 拉起；过了 DEADLINE 不再开始新分析，每个合约分析完立即落盘
@@ -44,6 +44,8 @@ def load(p, d):
 
 def dump(p, o):
     t = p + '.%d.tmp' % os.getpid(); json.dump(o, open(t, 'w'), ensure_ascii=False, indent=1); os.replace(t, p)
+    if p == OUT:
+        t = OUT_BAK + '.%d.tmp' % os.getpid(); json.dump(o, open(t, 'w'), ensure_ascii=False, indent=1); os.replace(t, OUT_BAK)
 
 
 def now_cst(t=None): return time.strftime('%m-%d %H:%M', time.gmtime((t or time.time()) + 8 * 3600))
@@ -525,7 +527,7 @@ def main():
         for a in [x.lower() for x in args if x.startswith('0x')]:
             print(json.dumps(run_one(a), ensure_ascii=False, indent=1))
         return
-    st = load(ST, {}); outd = load(OUT, {'contracts': {}}); res = outd.setdefault('contracts', {})
+    st = load(ST, {}); outd = load(OUT, None) or load(OUT_BAK, None) or {'contracts': {}}; res = outd.setdefault('contracts', {})  # 2026-11-10 PIG：newtpl.json 丢失过，改为双份落盘、丢了从备份恢复
     now = time.time(); cands = candidates()
     todo = []
     for a in cands:

@@ -6,7 +6,7 @@ bash $AIDBOT_DATA/fmkick.sh > $AIDBOT_DATA/discover_out/fmkick.json 2>&1  # 2026
 # 2026-11-01 学  v2.5.0「只允许一份在跑」：两轮重叠会同时写 state.json/found.json（chainscan 曾写坏过 state）。已有一份在跑就直接退出，沿用它的输出。
 exec 9>/tmp/discover_all.lock
 if ! flock -n 9; then echo "discover_all 已有一份在跑：等它跑完（≤220 秒）直接用它的输出，不重复启动"; flock -w 220 9; cat $AIDBOT_DATA/discover_out/summary.txt 2>/dev/null; exit 0; fi
-D=$AIDBOT_DATA; O=$D/discover_out; mkdir -p "$O"; find "$O" -maxdepth 1 -type f \( -name '*.json' -o -name '*.err' -o -name summary.txt \) ! -name fail_streak.json ! -name fp_live.json ! -name possell_live.json ! -name possell_daemon_out.json ! -name possell_reported.json ! -name autofill_fast.json ! -name notify_last_sent.json ! -name '*_reported.json' ! -name '*_state.json' ! -name '*_live.json' ! -name '*_hb.json' ! -name '*_announce.json' -delete  # 2026-11-09：salearm_reported.json 每轮被删 → 开售定时重复提醒  # 2026-11-01 20:50：常驻进程的心跳/未汇报卖出结果和失败计数不再每轮删掉
+D=$AIDBOT_DATA; O=$D/discover_out; mkdir -p "$O"; find "$O" -maxdepth 1 -type f \( -name '*.json' -o -name '*.err' -o -name summary.txt \) ! -name fail_streak.json ! -name newtpl.json ! -name newtpl_autofill_trig.json ! -name fp_live.json ! -name possell_live.json ! -name possell_daemon_out.json ! -name possell_reported.json ! -name autofill_fast.json ! -name notify_last_sent.json ! -name '*_reported.json' ! -name '*_state.json' ! -name '*_live.json' ! -name '*_hb.json' ! -name '*_announce.json' -delete  # 2026-11-09：salearm_reported.json 每轮被删 → 开售定时重复提醒  # 2026-11-01 20:50：常驻进程的心跳/未汇报卖出结果和失败计数不再每轮删掉  # 2026-11-10 PIG：newtpl.json 每轮被删 → 新模板进度从不刷新、60% 不触发
 run() { # name timeout dir cmd...
   local n=$1 t=$2 dir=$3; shift 3
   # 2026-11-03：先写 .run 临时文件再原子替换（原来 > 直接截断，fairmint.json 每轮约 110 秒是空文件，autofill 这时读到空 = 漏掉 ≥60% 的盘）；输出为空则保留上一轮

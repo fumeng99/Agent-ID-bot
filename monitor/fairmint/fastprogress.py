@@ -65,6 +65,9 @@ def targets(found):
     for a, v in found.items():
         if v.get('opened') or v.get('is_nft') or v.get('reserve_missing'): continue  # 资金没留作开池储备的（BNDOG 类）不进高频
         oa = v.get('open_at_shares')  # 只用合约里读到的开池份数；cap_guess（猜的总量）不进高频检查
+        # 2026-11-10 PIG/PNUT 漏打：Launchpad 模板（MAX_SHARES 满即开池，open_bnb + 30% 国库）没有 open_at_shares，导致从不进高频。用 OPEN_BNB/(单价×70%) 推出开池份数（PIG/PNUT 均 = 10000）
+        if not oa and v.get('open_bnb_bnb') and v.get('cost_1share_bnb') and v.get('agentid_registry_in_code'):
+            oa = int(round(v['open_bnb_bnb'] / (v['cost_1share_bnb'] * 0.7)))
         if not oa: continue
         out.append((a, v.get('template'), oa, v.get('name') or '未命名'))
     return out
@@ -75,8 +78,16 @@ def read_once(tg):
     for a, tpl, _, _ in tg:
         m, o = CORE.get(tpl, CORE[None])
         calls += [('eth_call', [{'to': a, 'data': '0x' + CU.sel(m)}, 'latest']), ('eth_call', [{'to': a, 'data': '0x' + CU.sel(o)}, 'latest'])]
-    try: R = batch(calls, tolerant=True, timeout=RPC_TIMEOUT, deadline=time.time() + RPC_BUDGET, parallel=4) if calls else []
-    except Exception as e: return None, str(e)[:160]
+    # 2026-11-10 PIG/PNUT：先走 Multicall3（150 条打成 1 个 eth_call，约 1.5 秒读完 680 盘）；整体失败才退回逐条批量
+    R = None
+    try:
+        from rpcpool import mcall
+        R = mcall([(c[1][0]['to'], c[1][0]['data']) for c in calls], deadline=time.time() + RPC_BUDGET) if calls else []
+        if calls and not any(x is not None for x in R): R = None
+    except Exception: R = None
+    if R is None:
+        try: R = batch(calls, tolerant=True, timeout=RPC_TIMEOUT, deadline=time.time() + RPC_BUDGET, parallel=4) if calls else []
+        except Exception as e: return None, str(e)[:160]
     # 2026-11-02：单项读空（None：限流/节点错误；Jager 类核心字段不会 revert）的盘换节点再读一次，仍失败才计 read_failed（unknown，下一轮再读）
     miss = [j for j in range(len(tg)) if R[2 * j] is None]
     if miss and time.time() - T0 < FP_DEADLINE - 8:
@@ -114,7 +125,11 @@ def launch_autofill(a, row, found, out):
     subprocess.Popen(['bash', '-c', f'cd {L} && timeout 900 python3 autofill.py > discover_out/autofill_fast.json 2>&1; timeout 110 python3 fairmint/fairmint.py --minutes 10 > discover_out/fairmint.fast.json 2>/dev/null && mv discover_out/fairmint.fast.json discover_out/fairmint.json'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+STEP_T0 = [0.0]
+
+
 def step(found, st, aok):
+    STEP_T0[0] = time.time()
     now = time.time(); tg = targets(found)
     pend = load(os.path.join(D, 'audit_pending.json'), {}); rep = load(os.path.join(D, 'audit_report.json'), {})
     recheck = load(os.path.join(L, 'discover_out', 'autofill_recheck.json'), {})
@@ -152,7 +167,9 @@ def step(found, st, aok):
         if pct >= 30 and (rate or 0) >= 2 and 'hot_alert' not in s['alerted']:
             s['alerted'].append('hot_alert'); out.setdefault('hot_alert', []).append(row)
         if pct >= MIN or (row['eta_70_min'] is not None and row['eta_70_min'] <= 30):
-            if pct >= 40 and (DAEMON or time.time() - T0 < FP_DEADLINE - 12):  # B1 预热（单次模式剩余时间不够就不扫，避免超时）：提前把 Agent ID 铸造钱包数算进缓存，70% 时 autofill 不用临时扫
+            # 2026-11-10：热盘多时每轮每盘 8 秒扫 Agent ID 钱包，一轮超 120 秒 → fmkick 判卡死杀掉重启 → 心跳永远停。改为每轮总预算 12 秒、每盘 5 分钟最多扫一次
+            if pct >= 40 and time.time() - STEP_T0[0] < 12 and time.time() - s.get('minters_at', 0) >= 300 and (DAEMON or time.time() - T0 < FP_DEADLINE - 12):
+                s['minters_at'] = time.time()  # B1 预热（单次模式剩余时间不够就不扫，避免超时）：提前把 Agent ID 铸造钱包数算进缓存，70% 时 autofill 不用临时扫
                 try:
                     import minters as _MN; _r = _MN.ai_minters(a, budget=8) or {}; row['ai_minters'] = _r.get('ai_minters') if _r.get('status') == 'ok' else 'unknown'
                 except Exception: pass
@@ -172,8 +189,10 @@ def step(found, st, aok):
         elif a not in aok and tpl == 'jager' and 'auto_audit' in s['alerted'] and time.time() - s.get('audit_at', 0) >= 60 \
                 and (a in pend or time.time() - s.get('audit_at', 0) >= 170) and (pct >= 30 or (rate or 0) >= 2 or (row['eta_70_min'] or 999) <= 30):
             out.setdefault('auto_audit_started', []).append(a); out.setdefault('audit_retry', []).append(a); launch_audit(a, s, pct)
+        # 2026-11-10 PIG/PNUT：40% 太晚（Launchpad 盘可几十分钟满），改 ≥15% 或 ≥2%/分钟就提前审计（只读）
         # 非 Jager 模板（jagent/boss/mao 等）：≥40% 提前跑通用审计（audit_report.json），读失败 60 秒后重审；2026-11-03 03:21 起 report pass = 这些模板的审计闸门，60% 时 autofill 用
-        if tpl not in ('jager', None) and pct >= 40 and pct <= 100 and time.time() - s.get('audit_at', 0) >= 60 \
+        if tpl not in ('jager', None) and (pct >= 15 or (rate or 0) >= 2) and pct <= 100 \
+                and time.time() - s.get('audit_at', 0) >= 60 \
                 and (rep.get(a) is None or (rep[a].get('status') == 'unknown')) and s.get('report_n', 0) < 30:
             s['report_n'] = s.get('report_n', 0) + 1; out.setdefault('report_audit_started', []).append(a); launch_audit(a, s, pct, report=True)
         # 2026-11-01 19:27 BNBHolder：自动审计因「源码未验证」不通过的热盘，开池前每 2 分钟重跑一次只读审计（项目方常在开铸后才验证源码）；人工结论不动
