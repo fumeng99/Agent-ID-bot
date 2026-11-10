@@ -59,3 +59,8 @@ else
   python3 -c "import subprocess;subprocess.Popen(['bash','-c','cd $AIDBOT_DATA/tg && exec python3 tgfast.py --daemon --every 15 >> ../discover_out/tgfast.log 2>&1'],start_new_session=True,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)"
   echo "{\"tgfast\":\"started\",\"prev_heartbeat_age_s\":$hb}"
 fi
+# 2026-11-10 AMNT（agentmining.fun）Plan B CPU 挖矿常驻：value=0 免费，按 0 元 Mint 规则 preview 干净才执行
+if ! pgrep -f "^python3 amnt_mine.py" >/dev/null; then
+  python3 -c "import subprocess;subprocess.Popen(['bash','-c','cd $AIDBOT_DATA && TZ=Asia/Shanghai exec python3 amnt_mine.py >> discover_out/amnt_mine.out 2>&1'],start_new_session=True,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)"
+  echo '{"amnt_mine":"started"}'
+else echo '{"amnt_mine":"running"}'; fi
