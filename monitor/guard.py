@@ -1,4 +1,7 @@
-import sys as _s; _s.path.append('$AIDBOT_HOME/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
+import sys as _s; _s.path.append(_AH + '/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
 # 从  v2.3.2–v2.3.4 学来的通用防护（2026-10-31 19:32 用户「立马学习」）。其他脚本 import 使用。
 import time, json, os, subprocess
 from Crypto.Hash import keccak

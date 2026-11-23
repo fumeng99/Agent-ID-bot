@@ -16,8 +16,11 @@
   --dry：每号只做 preview（USDT 付款且需要授权时只预演授权），绝不 execute。
 输出：每号一行 JSON（label、state、tx、tx_url、cost_bnb/cost_u、token_delta、detail），最后一行 summary。
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import sys, os, json, subprocess, time, fcntl
-D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D); sys.path.append('$AIDBOT_HOME/pylib')
+D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D); sys.path.append(_AH + '/pylib')
 from concurrent.futures import ThreadPoolExecutor
 from rpcpool import rpc
 from guard import flap_guard
@@ -32,9 +35,9 @@ VAL = int(round(float(opt('--value-bnb', '0')) * 1e18)); USD = float(opt('--usdt
 if not TO.startswith('0x') or not DATA.startswith('0x') or not labels or (VAL and USD):
     sys.exit(__doc__)
 USDT = '0x55d398326f99059ff775485246999027b3197955'; ETH = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
-MAIN = '<MAIN_ADDR>'; B = '$AIDBOT_HOME/baw/node_modules/.bin/baw'
+MAIN = '<MAIN_ADDR>'; B = _AH + '/baw/node_modules/.bin/baw'
 USD_W = int(round(USD * 1e18)); FLOOR = int(0.0035e18); GAS = int(0.0005e18)
-A = [a for a in json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json')) if a['label'] in labels]
+A = [a for a in json.load(open(_AH + '/baw/accounts/accounts.json')) if a['label'] in labels]
 missing = [l for l in labels if l not in [a['label'] for a in A]]
 
 
@@ -50,7 +53,7 @@ def baw(a, args, t=150):
     if UNV:  # 用户当场破例（--unverified-ok 原话）：绕过 wrapper 的规则 B 闸，直接调 baw，其余预演闸门照旧
         iid = os.path.join(a['home'], 'instance_id')
         if os.path.exists(iid): env['BINANCE_INSTANCE_ID'] = open(iid).read().strip()
-        cmd = ['node', '$AIDBOT_HOME/baw/node_modules/@binance/agentic-wallet/dist/index.js']
+        cmd = ['node', _AH + '/baw/node_modules/@binance/agentic-wallet/dist/index.js']
     r = subprocess.run(cmd + args + ['--json'], env=env, capture_output=True, text=True, timeout=t)
     try: return json.loads(r.stdout)
     except Exception: return {'success': False, 'raw': (r.stdout + r.stderr)[:300]}

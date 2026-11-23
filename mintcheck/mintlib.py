@@ -103,7 +103,7 @@ def seed():
         if info['fingerprint'] and info['fingerprint'] not in t:
             t[info['fingerprint']] = {'name': tname, 'example': a, 'note': reason, 'at_cst': now()}
         n += 1
-    sold = C._load('$AIDBOT_DATA/soldout.json', {})
+    sold = C._load(_AD + '/soldout.json', {})
     addrs = [a for a in sold if a not in have][:300]
     codes = C.batch([('eth_getCode', [a, 'latest']) for a in addrs]) if addrs else []
     for a, code in zip(addrs, codes):

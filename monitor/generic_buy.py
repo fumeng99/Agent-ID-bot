@@ -17,8 +17,11 @@ usage:
   python3 generic_buy.py <合约> --probe                         → JSON：supported/原因、入口、币种、单价、进度、国库、储备、每号上限
   python3 generic_buy.py <合约> --budget '{"主":29.1,...}' [--dry]   → 每号一行 JSON + 最后一行 summary
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import sys, os, json, re, time, threading
-D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D); sys.path.append('$AIDBOT_HOME/pylib')
+D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D); sys.path.append(_AH + '/pylib')
 args = sys.argv[1:]
 PROBE = '--probe' in args; DRYF = '--dry' in args
 BUDGET = json.loads(args[args.index('--budget') + 1]) if '--budget' in args else {}

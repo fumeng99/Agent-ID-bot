@@ -13,6 +13,9 @@
   blocked        高危（未验证、可升级、项目方可提款等）或资格不符
   needs_ai       陌生合约：库里没有匹配、函数无法识别或参数需要链下数据 → 附摘要交 AI 分析
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, re, sys, time, urllib.request, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D)
@@ -21,7 +24,7 @@ import chain as C, mintlib as L
 T0 = time.time(); TIMES = {}
 def lap(k, t): TIMES[k] = round(TIMES.get(k, 0) + time.time() - t, 2)
 
-ACC_FILE = '$AIDBOT_HOME/baw/accounts/accounts.json'
+ACC_FILE = _AH + '/baw/accounts/accounts.json'
 SKIP_ADDR = {C.USDT, C.WBNB, C.REGISTRY, C.FACTORY, '0x10ed43c718714eb63d5aa57b78b54704e256024e', '0x000000000000000000000000000000000000dead',
              '0x0000000000000000000000000000000000000000', '0x13f4ea83d0bd40e75c8222255bc855a974568dd4'}
 MINT_RE = re.compile(r'^(mint|publicmint|freemint|claim|claimfree|claimgift|claimreward|claimsponsorreward|buy|buyshares|purchase|register|participate|join|'
@@ -267,7 +270,7 @@ def ladder_probe(addr, info, cands, w, price_wei):
 
 
 # ---------- baw preview（币安钱包官方模拟 + 风险，只预演不执行） ----------
-BAW = '$AIDBOT_HOME/baw/node_modules/.bin/baw'
+BAW = _AH + '/baw/node_modules/.bin/baw'
 
 
 def baw_preview(to, data, value, label):
@@ -349,7 +352,7 @@ def check_contract(addr, ws, qty, use_lib=True):
     method_hint = None
     for r in (m['exact'] + m['similar']):
         if r.get('mint_fn'): method_hint = r['mint_fn']; break
-    vfp = C._load('$AIDBOT_DATA/verified_fp.json', {})  # 1000+ 个已验证合约的指纹（用户 11-01 20:36 规则：指纹一致视为已验证）
+    vfp = C._load(_AD + '/verified_fp.json', {})  # 1000+ 个已验证合约的指纹（用户 11-01 20:36 规则：指纹一致视为已验证）
     fp_verified = (bool(m['exact']) and any(r.get('verified') for r in m['exact'])) or (info['fingerprint'] in set(vfp.values()) and not C.sourcify(addr).get('verified'))
     rep['fingerprint_verified'] = fp_verified
     st = read_state(addr, itf['functions'], ws)

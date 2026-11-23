@@ -3,7 +3,7 @@
 newtpl 识别出、有热度（30 分钟 ≥30 钱包）、但不会被自动执行的项目（付费/未知/review/reject），每个合约只报一次给用户判断。
 只读。输出 JSON：{"items":[...]}，巡逻读到就单独发「待你判断」简报。"""
 import json, os, time
-D = '$AIDBOT_DATA'
+D = _AD + ''
 EV = f'{D}/discover_out/newtpl_events.jsonl'; ST = f'{D}/discover_out/newtpl_reported.json'
 HEAT = 30
 st = json.load(open(ST)) if os.path.exists(ST) else {}

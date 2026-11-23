@@ -3,13 +3,16 @@
 value=0、无授权：按 0 元免费 Mint 自动规则（每笔 baw preview 干净才 execute）。2026-11-10 用户发 agentmining.fun「看看这个」。
 每天 21:00–23:00 CST 窗口：pinSession（如需）→ 未选计划的号 selectPlan(2)（首次免费）→ 按号轮流挖，凑 10 份或临近收窗提交 mineBatch。
 usage: amnt_mine.py [--dry] [--once]"""
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import sys, os, json, time, subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 dry = '--dry' in sys.argv
 sys.argv = ['fair_buy.py', '0x2d07b9ccdf5fcdbe26167358b94eeb4c9e995e4e', '0x2d07b9ccdf5fcdbe26167358b94eeb4c9e995e4e', '1'] + (['--dry'] if dry else [])
 exec(open(os.path.join(HERE, 'fair_buy.py')).read().split('from concurrent.futures import ThreadPoolExecutor')[0])
 T = '0x2d07b9ccdf5fcdbe26167358b94eeb4c9e995e4e'; ADP = '0x3c44b8ee0581f70026a7b650ec02373e25ef3200'
-KM = '$AIDBOT_HOME/amnt/km'; OUT = os.path.join(HERE, 'discover_out', 'amnt_mine.json'); LOG = os.path.join(HERE, 'discover_out', 'amnt_mine.log')
+KM = _AH + '/amnt/km'; OUT = os.path.join(HERE, 'discover_out', 'amnt_mine.json'); LOG = os.path.join(HERE, 'discover_out', 'amnt_mine.log')
 ORDER = ['主', '001', '002', '海贼王', '蜡笔小新', '高']
 ACC = sorted([a for a in A if a['label'] in ORDER], key=lambda a: ORDER.index(a['label']))
 def v(n, arg=''): return ci(T, '0x' + sel(n) + arg)

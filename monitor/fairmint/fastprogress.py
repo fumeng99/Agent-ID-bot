@@ -17,9 +17,12 @@
       python3 fastprogress.py --loop 100 --every 20   # 在 100 秒内每 20 秒读一次，有 urgent 立即输出并退出
       python3 fastprogress.py --min 30         # hot 门槛（默认 30%）
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, sys, time, fcntl
 D = os.path.dirname(os.path.abspath(__file__)); L = os.path.dirname(D)
-sys.path.insert(0, L); sys.path.insert(0, os.path.join(L, 'vendor')); sys.path.append('$AIDBOT_HOME/pylib')
+sys.path.insert(0, L); sys.path.insert(0, os.path.join(L, 'vendor')); sys.path.append(_AH + '/pylib')
 import codeutil as CU
 from rpcpool import batch
 

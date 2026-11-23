@@ -1,3 +1,6 @@
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 """合约码工具（2026-11-01 学自  v2.4.0 fullCode / v2.5.1 findCapSel / 保本退款检测）。只读。
 - full_code(rpc, call, a, code=None)：代理合约一律追到底——EIP-1967 实现槽、Beacon 槽、EIP-1167 最小代理、
   合约码开头写死的实现/Beacon 地址；返回拼接后的小写字节码（用来判断是否含 Agent ID 登记合约、找函数选择器）。
@@ -5,7 +8,7 @@
 - push4_selectors(code)：合约码里所有 PUSH4 常量（候选函数选择器）。
 - REFUND_SELS：退款类函数选择器（refund()/claimRefund()/refundOpen() 等，照  v2.5.1 清单）。
 """
-import sys as _s; _s.path.insert(0, '$AIDBOT_DATA/vendor'); _s.path.append('$AIDBOT_HOME/pylib')
+import sys as _s; _s.path.insert(0, _AD + '/vendor'); _s.path.append(_AH + '/pylib')
 from Crypto.Hash import keccak
 
 REG = '60b9262456de011f7d15a54cdd8c48baaa8b022f'

@@ -1,11 +1,14 @@
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 # 一键并发卖出：五个号同时下市价单把某币卖成 USDT。只在用户明确说卖（或已授权的止损规则触发）时运行。
 # usage: python3 fast_sell.py <token> [pct=100] [--slip 8] [--gas HIGH] [--dry] [labels...]
 import sys, os, json, subprocess, time
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rpcpool import batch
-U = '0x55d398326f99059fF775485246999027B3197955'; B = '$AIDBOT_HOME/baw/node_modules/.bin/baw'
-A = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+U = '0x55d398326f99059fF775485246999027B3197955'; B = _AH + '/baw/node_modules/.bin/baw'
+A = json.load(open(_AH + '/baw/accounts/accounts.json'))
 args = sys.argv[1:]; DRY = '--dry' in args
 def opt(k, d):
     return args[args.index(k) + 1] if k in args else d

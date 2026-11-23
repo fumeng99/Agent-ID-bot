@@ -1,7 +1,10 @@
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 """BSC 只读链上工具：RPC 节点池（并发 batch、限流冷却）、keccak、ABI 编解码、代理追踪、字节码指纹、选择器反查。
 本模块不签名、不发交易，只用 eth_call / eth_getCode / eth_getStorageAt / eth_estimateGas。"""
 import json, os, sys, time, hashlib, re, urllib.request, threading
-sys.path.append('$AIDBOT_HOME/pylib')
+sys.path.append(_AH + '/pylib')
 from Crypto.Hash import keccak as _k
 
 D = os.path.dirname(os.path.abspath(__file__))
@@ -44,7 +47,7 @@ def batch(calls, chunk=15, _retry=True):
     if _retry and len(calls) >= 20 and all(m == 'eth_call' and len(p) == 2 and isinstance(p[0], dict) and set(p[0]) <= {'to', 'data'} and p[1] == 'latest' for m, p in calls):
         try:
             import sys as _s
-            if '$AIDBOT_DATA' not in _s.path: _s.path.append('$AIDBOT_DATA')
+            if _AD + '' not in _s.path: _s.path.append(_AD + '')
             import rpcpool as _rp
             r = _rp.mcall([(p[0]['to'], p[0]['data']) for _, p in calls], deadline=time.time() + 25)
             return [x if x is not None else {'error': 'revert_or_unavailable'} for x in r]

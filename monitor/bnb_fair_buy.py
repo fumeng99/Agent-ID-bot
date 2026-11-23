@@ -1,4 +1,7 @@
-import sys as _s; _s.path.append('$AIDBOT_HOME/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
+import sys as _s; _s.path.append(_AH + '/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
 # 通用 fair mint 一键买（Jager/AGI 克隆模板：quotaOf/costOf/mint/mintWithBnb），五号并发。只在用户「确认买入 XX」或已授权的自动规则下运行。
 # usage: python3 fair_buy.py <mintContract> <token> <每号份数> [--max 每份最高U, 默认1] [--dry] [labels...]
 import sys, os, json, subprocess, time
@@ -9,8 +12,8 @@ from guard import flap_guard, lock_check
 _a=sys.argv[1:]; _p=[x for i,x in enumerate(_a) if not x.startswith('--') and (i==0 or _a[i-1]!='--max')]
 M=_p[0].lower(); T=_p[1].lower()
 U = '0x55d398326f99059ff775485246999027b3197955'; REG = '0x60b9262456de011f7d15a54cdd8c48baaa8b022f'
-B = '$AIDBOT_HOME/baw/node_modules/.bin/baw'; SH = int(_p[2])
-A = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+B = _AH + '/baw/node_modules/.bin/baw'; SH = int(_p[2])
+A = json.load(open(_AH + '/baw/accounts/accounts.json'))
 DRY = '--dry' in sys.argv; MAXP = float(sys.argv[sys.argv.index('--max')+1]) if '--max' in sys.argv else 1.0; only = _p[3:]
 def sel(s): k = keccak.new(digest_bits=256); k.update(s.encode()); return k.hexdigest()[:8]
 def u(x): return hex(int(x))[2:].rjust(64, '0')

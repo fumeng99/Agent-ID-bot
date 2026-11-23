@@ -4,8 +4,11 @@
 只在用户当场确认（--ok "<原话>"）时运行；value 固定为 单价×份数，不改金额、不换币。成功/售罄/额度 0/超时 停。
 用法：python3 racer.py --to <合约> --price 0.003 [--qty 10] [--secs 600] [--dry] --ok "原话" 主 001 ...
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import sys, os, json, time, subprocess, threading
-sys.path.insert(0, '$AIDBOT_HOME/bsc-mint-skill'); sys.path.insert(0, '$AIDBOT_HOME/bsc-mint-skill/vendor')
+sys.path.insert(0, _AH + '/bsc-mint-skill'); sys.path.insert(0, _AH + '/bsc-mint-skill/vendor')
 import chain
 a = sys.argv[1:]
 def opt(k, d=None): return a[a.index(k)+1] if k in a else d
@@ -13,12 +16,12 @@ TO = opt('--to').lower(); PRICE = float(opt('--price')); QTY = int(opt('--qty', 
 DRY = '--dry' in a; QMAP = json.loads(opt('--qtymap', '{}')); AUTO = '--auto' in a; PU = float(opt('--bnbu', '0')); CAP = int(opt('--cap', '0')); MINPS = int(float(opt('--min-per-share', '0')) * 1e18); OK = opt('--ok'); MAINLBL = opt('--main', '主')
 if not OK: sys.exit('需要 --ok "<用户原话>"')
 labels = [x for i, x in enumerate(a) if not x.startswith('--') and (i == 0 or a[i-1] not in ('--to','--price','--qty','--secs','--ok','--main','--cap','--min-per-share','--qtymap','--bnbu'))]
-ACC = {x['label']: x for x in json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))}
+ACC = {x['label']: x for x in json.load(open(_AH + '/baw/accounts/accounts.json'))}
 HANDLE = lambda x: ACC[x]['agentId'].replace('.ai', '')
 S = dict(totalMinted='0xa2309ff8', quota='0x786c90c2', mint='0xae3dfa28', inv='0x760b22a2', preview='0xb3d7f6b9')
 U = chain.enc_uint
-NODE = ['node', '$AIDBOT_HOME/baw/node_modules/@binance/agentic-wallet/dist/index.js']
-LOG = open(f'$AIDBOT_HOME/quote-racer/race_{TO[:10]}.log', 'a'); L = threading.Lock()
+NODE = ['node', _AH + '/baw/node_modules/@binance/agentic-wallet/dist/index.js']
+LOG = open(_AH + f'/quote-racer/race_{TO[:10]}.log', 'a'); L = threading.Lock()
 def log(**k):
     k['t'] = time.strftime('%H:%M:%S')
     with L: LOG.write(json.dumps(k, ensure_ascii=False) + '\n'); LOG.flush(); print(json.dumps(k, ensure_ascii=False), flush=True)
@@ -32,7 +35,7 @@ def baw(acc, args, t=60):
 def book(lbl, qty, tx):
     # 预授权自动抢：记入 autofill.json，计入每号每项目 30U / 每天 100U 额度
     import fcntl
-    p = '$AIDBOT_DATA/autofill.json'
+    p = _AD + '/autofill.json'
     with L, open(p + '.qr.lock', 'w') as lk:
         fcntl.flock(lk, fcntl.LOCK_EX)
         try: led = json.load(open(p))
@@ -41,16 +44,16 @@ def book(lbl, qty, tx):
         d = led.setdefault(day, {'spent_u': 0, 'buys': []}); u = round(PRICE * qty * PU + 0.02, 2)
         d['buys'].append({'name': 'quote-racer', 'contract': TO, 'executor': 'quote_racer', 'per_account_u': {lbl: u}, 'tx': tx, 'qty': qty, 'time': time.strftime('%H:%M', time.gmtime(time.time() + 8 * 3600))})
         d['spent_u'] = round(d.get('spent_u', 0) + u, 2); json.dump(led, open(p, 'w'), ensure_ascii=False, indent=1)
-_DIST = '$AIDBOT_HOME/baw/node_modules/@binance/agentic-wallet/dist'
+_DIST = _AH + '/baw/node_modules/@binance/agentic-wallet/dist'
 if not os.path.exists(_DIST + '/qrworker.mjs') or os.path.getmtime(_DIST + '/qrworker.mjs') < os.path.getmtime(_DIST + '/index.js'):
-    subprocess.run(['python3', '$AIDBOT_HOME/quote-racer/make_qrworker.py'], check=True)
+    subprocess.run(['python3', _AH + '/quote-racer/make_qrworker.py'], check=True)
 class Worker:
     # 常驻 baw worker（qrworker.mjs）：preview 约 0.45s（CLI 约 1.0s），preview 干净当场 execute，少一次往返
     def __init__(s, acc):
         env = dict(os.environ, HOME=acc['home'], npm_config_cache='/tmp/npmcache')
         iid = os.path.join(acc['home'], 'instance_id')
         if os.path.exists(iid): env['BINANCE_INSTANCE_ID'] = open(iid).read().strip()
-        s.p = subprocess.Popen(['node', '$AIDBOT_HOME/baw/node_modules/@binance/agentic-wallet/dist/qrworker.mjs'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        s.p = subprocess.Popen(['node', _AH + '/baw/node_modules/@binance/agentic-wallet/dist/qrworker.mjs'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
         s.ready = json.loads(s.p.stdout.readline() or '{}').get('ready'); s.res = {}; s.ev = {}; s.lk = threading.Lock(); s.n = 0
         threading.Thread(target=s._rd, daemon=True).start()
         if s.ready:  # 预热一次（首个请求约 0.75s，之后约 0.4s）

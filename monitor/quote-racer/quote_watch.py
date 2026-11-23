@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """只读：从巡逻各输出里抓新合约地址，识别「报价型 mint」（FLOKI 模板：StaleQuote 0xb915daf5 / mint 0xae3dfa28 / mintWithInviter 0x760b22a2），
 读进度与单价，新发现或进度变化 ≥10% 输出 alerts（每盘首次必报）。状态 quote_watch_state.json。"""
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import sys, os, re, json, glob, time
-sys.path.insert(0, '$AIDBOT_HOME/bsc-mint-skill'); import chain
-LM = '$AIDBOT_DATA'; ST = '$AIDBOT_HOME/quote-racer/quote_watch_state.json'
+sys.path.insert(0, _AH + '/bsc-mint-skill'); import chain
+LM = _AD + ''; ST = _AH + '/quote-racer/quote_watch_state.json'
 st = json.load(open(ST)) if os.path.exists(ST) else {'checked': {}, 'hits': {}}
 SIGS = ('b915daf5', 'ae3dfa28', '760b22a2')
 LOT_SELS = [chain.sel(x)[2:] for x in ('MAX_LOTS()', 'MAX_PAID_LOTS()', 'TOKENS_PER_LOT()')]
@@ -92,9 +95,9 @@ def auto_launch(a, nm, pr):
         qm[l] = int(cap_bnb / (pr / 1e18) + 1e-9)
     if not any(qm.values()): return '六号额度已满（每项目 30U / 每天 100U），未自动抢'
     labs = [l for l in LBLS if qm[l] > 0]; main = '主' if qm.get('主') else labs[0]
-    cmd = ['python3', '$AIDBOT_HOME/quote-racer/racer.py', '--to', a, '--price', str(pr / 1e18), '--qtymap', json.dumps(qm, ensure_ascii=False), '--bnbu', str(pu), '--auto', '--secs', '600',
+    cmd = ['python3', _AH + '/quote-racer/racer.py', '--to', a, '--price', str(pr / 1e18), '--qtymap', json.dumps(qm, ensure_ascii=False), '--bnbu', str(pu), '--auto', '--secs', '600',
            '--ok', '2026-11-08 22:44 用户预授权「要」「按照这次来」：已验证报价型盘自动抢，每号 ≤0.03 BNB'] + labs
-    subprocess.Popen(cmd, stdout=open('$AIDBOT_HOME/quote-racer/auto_launch.log', 'a'), stderr=subprocess.STDOUT, start_new_session=True)
+    subprocess.Popen(cmd, stdout=open(_AH + '/quote-racer/auto_launch.log', 'a'), stderr=subprocess.STDOUT, start_new_session=True)
     return '已自动六号开抢（每号份数 ' + '、'.join(f'{l} {qm[l]}' for l in LBLS) + '），成交另报'
 def rd(a, sig):
     ok, v = chain.call(a, chain.sel(sig));
@@ -154,7 +157,7 @@ for i, a in enumerate(live):
         alerts.append(f"⚠️ 需处理｜付费 mint 进度已到 {pct}%｜{nm}｜{a[:6]}…{a[-4:]}｜单价读数 {pr/1e18:g} BNB（以简报核实为准）｜请跑 mintcheck 出完整简报，需要买回复「确认买入 XX 金额 + 账号」｜https://bscscan.com/address/{a}")
 if len(pw) > 5000: st['pw'] = dict(list(pw.items())[-5000:])
 # 自动抢的成交/回滚结果：读 race_*.log 新增行，进 alerts 单发
-for lf in glob.glob('$AIDBOT_HOME/quote-racer/race_*.log'):
+for lf in glob.glob(_AH + '/quote-racer/race_*.log'):
     off = st.setdefault('log_off', {}).get(lf, os.path.getsize(lf) if lf not in st['log_off'] else 0)
     with open(lf) as fh:
         fh.seek(off); new_lines = fh.read(); st['log_off'][lf] = fh.tell()
@@ -167,7 +170,7 @@ st['checked'] = dict(list(st['checked'].items())[-20000:])
 json.dump(st, open(ST, 'w'))
 # 2026-11-09 00:45 用户「彻底解决这个问题」：通用进度监控（不靠固定函数名），alerts 并入本轮
 try:
-    sys.path.insert(0, '$AIDBOT_HOME/quote-racer'); import progress_universal as PU
+    sys.path.insert(0, _AH + '/quote-racer'); import progress_universal as PU
     _pu = PU.run(max_new=120, budget=50); alerts += _pu['alerts']
     sys.stderr.write('progress_universal ' + json.dumps({k: v for k, v in _pu.items() if k != 'alerts'}) + '\n')
 except Exception as _e: sys.stderr.write('progress_universal err ' + str(_e)[:200] + '\n')

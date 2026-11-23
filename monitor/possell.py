@@ -13,11 +13,14 @@ D 预估冲击 >15%（卖出额 > 池子单边 15%）就分两笔、间隔 15 �
 用法：python3 possell.py [--dry] [--loop 秒 --every 秒]
 输出 JSON：sold / alerts / notify / errors
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import os, sys, json, time, subprocess, urllib.request
-sys.path.insert(0, '$AIDBOT_HOME/pylib'); sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _AH + '/pylib'); sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rpcpool import batch
 D = os.path.dirname(os.path.abspath(__file__))
-ST = f'{D}/possell_state.json'; ACC = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+ST = f'{D}/possell_state.json'; ACC = json.load(open(_AH + '/baw/accounts/accounts.json'))
 LAB = {a['label']: a['bsc'].lower() for a in ACC}
 args = sys.argv[1:]; DRY = '--dry' in args
 def opt(k, d): return float(args[args.index(k) + 1]) if k in args else d

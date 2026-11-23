@@ -2,6 +2,9 @@
 """自动补 gas：账号 BNB < GAS_MIN_BNB 且 USDT >= GAS_TOPUP_USDT 时，用 USDT 经 baw market-order swap 换 BNB。
 每号每天最多 GAS_MAX_PER_DAY 次（账本 $AIDBOT_DATA/gas_topup.json）。只做 USDT->BNB。需用户事先授权。
 用法：python3 gas_topup.py [--dry]"""
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, subprocess, sys, time, urllib.request
 here = os.path.dirname(os.path.abspath(__file__))
 H = os.environ.get('AIDBOT_HOME', os.path.expanduser('~/.agent-id-bot'))
