@@ -20,8 +20,19 @@ try:
 except Exception as _e:
     print('sellguard unavailable: %s' % _e, flush=True)
 waits = [5, 15, 30, 60]
+# 2026-11-23：带税/多档池的代币在固定 8% 滑点下可能预演失败；失败后逐级放宽到 15% 和 auto
+SLIP_LADDER = ['8', '15', 'auto']
+def _with_slip(argv, slip):
+    out = list(argv)
+    if '--slip' in out:
+        out[out.index('--slip') + 1] = slip
+    else:
+        out += ['--slip', slip]
+    return out
 for i in range(5):
-    r = subprocess.run(['python3', os.path.join(D, 'fast_sell.py')] + args, capture_output=True, text=True, cwd=D)
+    slip = SLIP_LADDER[min(i // 2, len(SLIP_LADDER) - 1)]
+    r = subprocess.run(['python3', os.path.join(D, 'fast_sell.py')] + _with_slip(args, slip),
+                       capture_output=True, text=True, cwd=D)
     out = r.stdout + r.stderr; print(out, flush=True)
     ok = False; limited = False
     for ln in out.splitlines():

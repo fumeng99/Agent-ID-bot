@@ -30,10 +30,12 @@ t0 = time.time()
 dec = int(batch([('eth_call', [{'to': T, 'data': '0x313ce567'}, 'latest'])])[0], 16)
 bals = batch([('eth_call', [{'to': T, 'data': '0x70a08231' + a['bsc'][2:].lower().rjust(64, '0')}, 'latest']) for a in acc])
 def one(a, b):
-    q = int(b, 16) * PCT / 100 / 10**dec
-    if q < 1e-6: return a['label'], 'no_balance'
-    qty = ('%.6f' % q).rstrip('0').rstrip('.') if PCT < 100 else str(int(b, 16) / 10**dec)
-    if PCT >= 100: qty = '%.6f' % (int(b, 16) // 10**(dec-6) / 1e6) if dec >= 6 else str(int(b, 16) / 10**dec)
+    raw = int(b, 16)
+    sell_wei = raw * int(round(PCT * 100)) // 10000 if PCT < 100 else raw
+    if sell_wei <= 0: return a['label'], 'no_balance'
+    # 2026-11-23：按 decimals 精确格式化，不再用 %.6f 截断（18 位小数的币会被砍掉有效位）
+    whole, frac = divmod(sell_wei, 10**dec)
+    qty = str(whole) if frac == 0 else ('%d.%s' % (whole, str(frac).rjust(dec, '0').rstrip('0')))
     env = dict(os.environ, HOME=a['home'], npm_config_cache='/tmp/npmcache')
     if not DRY:  # 2026-11-01 D：每号先 quote 预演，失败不下单
         # 2026-11-02：quote 是只读报价。网络/超时/限流类失败（非业务拒绝）重试 3 次、退避 1/2 秒；仍失败标 quote_unknown（possell 不计入放弃次数）
