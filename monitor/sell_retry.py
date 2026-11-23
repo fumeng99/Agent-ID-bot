@@ -9,6 +9,16 @@ args = sys.argv[1:]; label = args[-1]; tok = args[0].lower()
 D = os.path.dirname(os.path.abspath(__file__))
 lk = open(f'/tmp/sell_{tok[2:10]}.lock', 'w')
 fcntl.flock(lk, fcntl.LOCK_EX)  # 排队，不并发
+# 2026-11-23：卖出前先过可卖性闸。命中判死缓存（discover_out/unsellable.json）直接退出，不烧 gas。
+try:
+    sys.path.insert(0, D)
+    from sellguard import unsellable
+    _why = unsellable(tok)
+    if _why:
+        print(json.dumps({'skip': 'unsellable_cached', 'token': tok, 'why': str(_why)[:120]}, ensure_ascii=False), flush=True)
+        sys.exit(0)
+except Exception as _e:
+    print('sellguard unavailable: %s' % _e, flush=True)
 waits = [5, 15, 30, 60]
 for i in range(5):
     r = subprocess.run(['python3', os.path.join(D, 'fast_sell.py')] + args, capture_output=True, text=True, cwd=D)
