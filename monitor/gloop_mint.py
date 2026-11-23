@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 # Gloop (0x183c…e4fe) 合约内 PoW 免费 mint：keccak256(minter ++ nonce) 前 N 位为 0。每号 preview 干净才 execute。
 import sys, os, json, time, subprocess, multiprocessing as mp
 from Crypto.Hash import keccak
@@ -37,8 +40,8 @@ def rpc_call(data):
 
 if __name__ == '__main__':
     only = sys.argv[1:]
-    accts = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
-    B = '$AIDBOT_HOME/baw/node_modules/.bin/baw'
+    accts = json.load(open(_AH + '/baw/accounts/accounts.json'))
+    B = _AH + '/baw/node_modules/.bin/baw'
     out = []
     for a in accts:
         if only and a['label'] not in only: continue

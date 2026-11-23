@@ -1,9 +1,12 @@
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 # 漏打审计：对近期 Agent ID 相关合约，用五个号逐一 eth_call 模拟各种免费铸造写法（含带自己 Agent ID 编号），列出能免费铸、我们却还没铸的。只读。
 import json, sys, os, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rpcpool import batch, rpc
 from guard import agent_id
-A = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+A = json.load(open(_AH + '/baw/accounts/accounts.json'))
 st = json.load(open('chainscan/state.json')); f = json.load(open('fairmint/found.json'))
 toks = []  # 旧方法 getLogs 公共节点常拒，改用 scan.py 记录的 targets
 for t, tg in st.get('targets', {}).items(): pass

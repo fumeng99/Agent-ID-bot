@@ -30,10 +30,13 @@
       python3 discoverd.py --reconcile [--hours 2]    # 对账
       python3 discoverd.py --replay FROM TO [--sim-every 60]   # 历史回放（只读，不写 found.json/状态），按 60 秒一轮模拟发现时间
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, sys, time, fcntl, threading, subprocess
 from concurrent.futures import ThreadPoolExecutor
 D = os.path.dirname(os.path.abspath(__file__)); L = os.path.dirname(D)
-sys.path.insert(0, D); sys.path.insert(0, L); sys.path.insert(0, os.path.join(L, 'vendor')); sys.path.append('$AIDBOT_HOME/pylib')
+sys.path.insert(0, D); sys.path.insert(0, L); sys.path.insert(0, os.path.join(L, 'vendor')); sys.path.append(_AH + '/pylib')
 os.environ.setdefault('FM_DEADLINE', '55')
 import fairmint as F
 import codeutil as CU

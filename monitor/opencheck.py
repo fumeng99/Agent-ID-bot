@@ -3,10 +3,13 @@
 每个项目只提醒一次（seen.json 里记 open_alerted）。输出 JSON：{"new_open":[...], "checked":N}。
 用法：python3 opencheck.py [--dry]   （--dry 不写回 seen.json）
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, sys, time, threading, urllib.request
 from rpcpool import batch as _batch
 T0 = time.time()
-LAST = '$AIDBOT_DATA/opencheck_last.json'
+LAST = _AD + '/opencheck_last.json'
 # 2026-11-02 修复（02:48–03:23、12:4x 连续 exit=124）：持仓候选 468 个 ×（6 号余额 + 3 个报价池）≈4200 个 eth_call，
 # 原来 40 条一批串行、每节点 10 秒超时，公共节点限流时 >90 秒。现在：单次请求 6 秒超时、4 批并发、RPC 截止 T0+60 秒；
 # DexScreener/Gecko 并发查；超过 75 秒还没完 → 看门狗输出上一轮成功结果（stale=true）并 exit=5，不留空文件、不写 seen.json。
@@ -20,8 +23,8 @@ def _fallback(reason):
     os.write(1, (json.dumps(o, ensure_ascii=False) + '\n').encode()); os._exit(5)
 _wd = threading.Timer(float(os.environ.get('OC_WATCHDOG', '75')), _fallback, args=('超过 75 秒',)); _wd.daemon = True; _wd.start()
 
-SEEN = '$AIDBOT_DATA/seen.json'
-ACC = '$AIDBOT_HOME/baw/accounts/accounts.json'
+SEEN = _AD + '/seen.json'
+ACC = _AH + '/baw/accounts/accounts.json'
 V2 = '0xca143ce32fe78f1f7019d7d551a6402fc5350c73'
 V3 = '0x0bfbcf9fa4f9c56b0f40a671ad40e0805a091865'
 WBNB = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c'

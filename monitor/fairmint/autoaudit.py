@@ -22,10 +22,13 @@
   不写 audit_ok.json。2026-11-03 03:21 统一规则起：audit_report pass = 非 Jager 模板的审计闸门，autofill 在 ≥60% 时据此（加其余全部闸门）自动买。
 用法：python3 autoaudit.py [--priority] [--report] <mint合约> [<mint合约>...]
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, subprocess, sys, time, uuid, urllib.request, fcntl
 os.environ.setdefault('RPCPOOL_COOL', '/tmp/rpcpool_cool_audit.json')
 D = os.path.dirname(os.path.abspath(__file__)); L = os.path.dirname(D)
-sys.path.append('$AIDBOT_HOME/pylib'); sys.path.insert(0, L)
+sys.path.append(_AH + '/pylib'); sys.path.insert(0, L)
 import codeutil as CU
 from rpcpool import rpc, call_strict
 AOK = f'{D}/audit_ok.json'; FOUND = f'{D}/found.json'; PEND = f'{D}/audit_pending.json'; REP = f'{D}/audit_report.json'

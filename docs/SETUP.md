@@ -30,8 +30,14 @@ cp config/config.example.json config/config.json
 ```sh
 cd $AIDBOT_HOME/baw
 npm install @binance/agentic-wallet
+# 注意：npm 在 Linux/macOS 把 node_modules/.bin/baw 装成指向 dist/index.js 的符号链接。
+# 直接 cp 会写穿链接、把 npm 包入口覆盖成 bash 脚本（运行报 SyntaxError: Invalid or unexpected token）。
+rm -f node_modules/.bin/baw
 cp $REPO/baw/baw-wrapper.sh node_modules/.bin/baw
+sed -i 's/\r$//' node_modules/.bin/baw   # Windows 检出的文件是 CRLF，必须转换
 chmod +x node_modules/.bin/baw
+head -1 node_modules/.bin/baw                              # 应为 #!/usr/bin/env bash
+head -1 node_modules/@binance/agentic-wallet/dist/index.js # 应为 #!/usr/bin/env node
 ```
 
 包装器会从 `$HOME/instance_id` 读取固定设备编号并注入 `BINANCE_INSTANCE_ID`，避免运行环境变化导致会话失效。
@@ -70,6 +76,21 @@ export CLAWBY_API_KEY=<你的密钥>
 bash $REPO/monitor/update_skills.sh
 ```
 
+## 5.5 铺脚本到数据目录并生成账号清单（必做）
+
+$AIDBOT_DATA 是运行目录：discover_all.sh 与提示词里的命令都按 $AIDBOT_DATA/<脚本名> 找脚本。
+只把仓库放在别处、不铺脚本时，每个发现源都会 0 秒退出（can not open file .../data/chainscan/scan.py），
+巡逻看起来跑了其实什么也没发现。
+
+```sh
+bash $REPO/monitor/sync-monitor.sh          # 把 monitor/ 铺到 $AIDBOT_DATA
+python3 $REPO/monitor/gen_accounts_json.py  # 生成 $AIDBOT_HOME/baw/accounts/accounts.json
+ln -sfn "$AIDBOT_DATA" "$AIDBOT_HOME/launch-monitor"   # baw-wrapper 的源码硬闸要在这里找 verify_source.py
+```
+
+`accounts.json` 是账号清单（label / bsc / home 三个键），几乎所有脚本第一行就读它；只收录已填真实地址的账号。
+`launch-monitor` 缺失时，`baw-wrapper.sh` 会拒绝一切 preview（规则 B：源码未验证不得交互）。
+git pull 之后重跑 sync-monitor.sh 即可同步脚本。
 ## 6. 自检
 
 ```sh

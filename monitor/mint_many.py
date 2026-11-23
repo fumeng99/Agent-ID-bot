@@ -1,3 +1,6 @@
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 # usage: mint_many.py <contract> <calldata> [acct labels...]  — preview→(clean)→execute per account
 import sys,json,subprocess,os,time
 sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
@@ -12,8 +15,8 @@ except Exception as _e:
     _v={'verified':None,'source':f'查询失败 {_e}'}
 if _v.get('verified') is not True:
     print(('ALL','source_unverified',C,_v.get('source'))); sys.exit(3)
-accts=json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
-B='$AIDBOT_HOME/baw/node_modules/.bin/baw'
+accts=json.load(open(_AH + '/baw/accounts/accounts.json'))
+B=_AH + '/baw/node_modules/.bin/baw'
 out=[]
 only=sys.argv[3:]
 import fcntl

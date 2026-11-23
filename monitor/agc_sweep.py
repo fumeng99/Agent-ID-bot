@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 # 2026-11-06 用户「彻底解决卡单」：兜底扫尾。每轮读六号 AGC 链上余额，价值 ≥0.3U 且当前没有卖单在跑 → 起 sell_retry 补卖（按用户「领取了立马卖」规则，滑点 ≤8%）。
 import json, os, subprocess, sys, time, fcntl
 D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D)
 from rpcpool import batch
 T = '0x63dea5acdbe1f27c968907d08610a5f0a0284ba6'
-A = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+A = json.load(open(_AH + '/baw/accounts/accounts.json'))
 lk = open(f'/tmp/sell_{T[2:10]}.lock', 'w')
 try: fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
 except OSError: sys.exit(0)  # 有卖单在跑，下轮再看

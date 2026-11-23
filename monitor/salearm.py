@@ -13,6 +13,9 @@ discoverd 每约 60 秒拉起（flock /tmp/salearm.lock）：
    某号某入口不 revert 就立刻并发对该号跑 mint_many.py（源码验证 + preview 只增不减、无授权无风险才 execute，unknown 不重发）。最多试 180 秒。
    每个合约只 fire 一次；结果写 discover_out/salearm_events.jsonl。
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import sys, os, json, time, re, subprocess, urllib.request
 D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D); os.chdir(D)
 from rpcpool import rpc
@@ -20,7 +23,7 @@ from codeutil import sel
 
 PLAN = 'salearm_plan.json'; EV = 'discover_out/salearm_events.jsonl'
 EARLY_SPAWN = 900; LATE_FIRE = 6 * 3600
-ACCTS = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+ACCTS = json.load(open(_AH + '/baw/accounts/accounts.json'))
 ACCTS.sort(key=lambda x: 0 if x['label'] == '主' else 1)   # 2026-11-09 用户「主先打」：主永远第一个探测、第一个发
 BAD = re.compile(r'sponsor|referr|invite|commission|rebate|dividend|owed|release|vest|stake|fee|withdraw|owner|refund|admin|set|pause|rescue|sweep|transfer|approve|burn|pull|pay|sell|redeem|snapshot|upgrade|renounce|init', re.I)
 GOOD = re.compile(r'free|gift|claim|airdrop|mint', re.I)

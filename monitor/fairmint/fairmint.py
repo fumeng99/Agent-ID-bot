@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-import sys as _s; _s.path.append('$AIDBOT_HOME/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
+import sys as _s; _s.path.append(_AH + '/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
 """Jager 类 Agent ID 分档 fair mint（付费）发现器。只读，不交易。
 原理：
  ① 铸造事件：Jager/AGI 克隆合约共用事件 Minted(address,uint256,uint256,uint256,uint256) topic0=0x19f5f791…，
@@ -17,7 +20,7 @@ import sys as _s; _s.path.append('$AIDBOT_HOME/pylib')  # 沙箱重置会清掉 
 用法：python3 fairmint.py [--minutes 30] [--hours 48] [--no-recheck]
 """
 import calendar, json, os, sys, time, urllib.request
-_s.path.insert(0, '$AIDBOT_DATA/vendor')
+_s.path.insert(0, _AD + '/vendor')
 D = os.path.dirname(os.path.abspath(__file__)); _s.path.insert(0, os.path.dirname(D))
 import codeutil as CU
 T0 = time.time(); DEADLINE = T0 + float(os.environ.get('FM_DEADLINE', '100'))  # discover_all 外层 timeout 110 秒

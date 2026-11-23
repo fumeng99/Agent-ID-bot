@@ -9,12 +9,15 @@
   revert   其他原因 → 附错误名，交给人工/下轮
 用法：python3 precheck.py  （discover_all.sh 之后跑；输出 discover_out/precheck.json）
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, re, sys, time, urllib.request
 D = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(D, 'chainscan'))
 from scan import rpc
 
-ACC = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+ACC = json.load(open(_AH + '/baw/accounts/accounts.json'))
 SOLD = os.path.join(D, 'soldout.json')
 ERRCACHE = os.path.join(D, 'error_sig_cache.json')
 KNOWN = {'0x52df9fe5': 'SoldOut()', '0x08c379a0': 'Error(string)', '0x4e487b71': 'Panic(uint256)'}

@@ -2,11 +2,14 @@
 """会话看门狗（2026-11-05 用户「彻底解决同时掉线」）：只读。每号 wallet status + wallet settings，
 记录 sessionExpireTime / inactiveSignOutTime / maxSigninDuration；掉线写 down，6 小时内到期写 expiring。
 输出 discover_out/session_watch.json；首次发现掉线的时刻写 down_since（用于判断是否服务端统一强制登出）。"""
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, subprocess, time
 from datetime import datetime
-BAW = '$AIDBOT_HOME/baw/node_modules/.bin/baw'
+BAW = _AH + '/baw/node_modules/.bin/baw'
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'discover_out/session_watch.json')
-A = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+A = json.load(open(_AH + '/baw/accounts/accounts.json'))
 try: prev = json.load(open(OUT))
 except Exception: prev = {}
 def baw(home, *a):

@@ -17,6 +17,9 @@
 用法：python3 mixedfree.py [--scan [--hours 48]] [--from-out] [--mint] [addr ...]
   discover_all.sh 每轮只读跑 --scan → discover_out/mixedfree.json；巡逻第 5 步跑 --from-out --mint 领取。
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, sys, time, subprocess
 D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D)
 from rpcpool import batch, rpc, call_strict
@@ -24,7 +27,7 @@ from codeutil import sel, full_code
 from guard import agent_id, FLAP_BLOCK
 from confirm import confirm_tx
 
-ACC = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+ACC = json.load(open(_AH + '/baw/accounts/accounts.json'))
 STF = os.path.join(D, 'mixedfree_state.json')
 MINT = '--mint' in sys.argv; SCAN = '--scan' in sys.argv
 HOURS = float(sys.argv[sys.argv.index('--hours') + 1]) if '--hours' in sys.argv else 48

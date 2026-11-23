@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-import sys as _s; _s.path.append('$AIDBOT_HOME/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
+import sys as _s; _s.path.append(_AH + '/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
 """官网免费入口全量扫描（2026-10-31 SAFU claimFree 漏领后加）。
 对每个项目官网（watch_sites + seen.json 的 link/site）：抓首页、脚本和一层 import，提取全部合约地址和
 写函数（ABI JSON、human-readable ABI、selectors 映射），筛出 claim/free/mint/register/airdrop 类函数，
@@ -9,13 +12,13 @@ import sys as _s; _s.path.append('$AIDBOT_HOME/pylib')  # 沙箱重置会清掉 
 """
 import json, os, re, sys, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
-import sys as _s; _s.path.insert(0,'$AIDBOT_DATA/vendor')
+import sys as _s; _s.path.insert(0,_AD + '/vendor')
 from Crypto.Hash import keccak
 from rpcpool import batch
 
-D = '$AIDBOT_DATA'
+D = _AD + ''
 ST = os.path.join(D, 'sitescan_state.json')
-ACC = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+ACC = json.load(open(_AH + '/baw/accounts/accounts.json'))
 KEEP = re.compile(r'^(claim|mint|register|airdrop|redeem|collect|harvest|faucet|enroll|join|free(mint|claim|register)|public(mint|claim)|genesis(mint|claim))', re.I)
 DROP = re.compile(r'(approve|transfer|permit|setapproval|withdraw|buy|paid|owner|admin|pause|burn|sell|swap|price|cost|count|supply|status|ed$|able$|time$|start|end$|of$|info|limit|max|^min(?!t)|minted|mintable|open|collection|reward|ed(?=[A-Z_]|$)|enabled|active|by$|bps$|^claims$|^mints$)', re.I)
 SIMPLE = {'': '', 'uint256': '1'.rjust(64, '0'), 'uint8': '1'.rjust(64, '0'), 'uint32': '1'.rjust(64, '0'),

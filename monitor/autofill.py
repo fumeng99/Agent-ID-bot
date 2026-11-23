@@ -1,4 +1,7 @@
-import sys as _s; _s.path.append('$AIDBOT_HOME/pylib')
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
+import sys as _s; _s.path.append(_AH + '/pylib')
 # 【唯一付费自动买入口】2026-11-03 03:21 用户原话「是都要等60%才对 全部改统一规则 适配全部项目」（合并 02:17 / 02:36 / 02:39 覆盖条）：
 #   任何付费项目，不论模板（jager/AGI 克隆、jagent、boss、mao、burnmix、boltbook、newtpl 识别的新模板…），销售/开池进度 ≥60%（合约读数，非猜测）
 #   且安全闸门全过 → 全天自动买；不限单笔；每号每项目累计 ≤30U（含 gas，跨天累计）；每号每天所有自动付费合计 ≤100U。
@@ -38,7 +41,7 @@ AOK = load(f'{D}/fairmint/audit_ok.json', {}); REP = load(f'{D}/fairmint/audit_r
 NT = (load(f'{D}/discover_out/newtpl.json', {}) or {}).get('contracts', {})
 LED = f'{D}/autofill.json'; led = load(LED, {})
 day = time.strftime('%Y-%m-%d', time.gmtime(time.time() + 8 * 3600))
-ACCS = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json')); LABELS = [x['label'] for x in ACCS]
+ACCS = json.load(open(_AH + '/baw/accounts/accounts.json')); LABELS = [x['label'] for x in ACCS]
 U = '0x55d398326f99059ff775485246999027b3197955'; WBNB = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c'
 R = '0x10ed43c718714eb63d5aa57b78b54704e256024e'
 r = batch([('eth_call', [{'to': R, 'data': '0xd06ca61f' + hex(10**18)[2:].rjust(64, '0') + '40'.rjust(64, '0') + '2'.rjust(64, '0') + WBNB[2:].rjust(64, '0') + U[2:].rjust(64, '0')}, 'latest'])])[0]
@@ -60,7 +63,7 @@ def topup_bnb(need_bnb, labels):
         amt = round((need_bnb - bnb) * BNBU * 1.05 + 0.3, 2)
         if usdt < amt: res.append((x['label'], 'usdt_insufficient', round(usdt, 2), amt)); continue
         env = dict(os.environ, HOME=x['home'], npm_config_cache='/tmp/npmcache')
-        rr = subprocess.run(['$AIDBOT_HOME/baw/node_modules/.bin/baw', 'market-order', 'swap', '--binanceChainId', '56', '--fromTokenQty', str(amt), '--fromToken', U, '--toToken', '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', '--json'], env=env, capture_output=True, text=True, timeout=120)
+        rr = subprocess.run([_AH + '/baw/node_modules/.bin/baw', 'market-order', 'swap', '--binanceChainId', '56', '--fromTokenQty', str(amt), '--fromToken', U, '--toToken', '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', '--json'], env=env, capture_output=True, text=True, timeout=120)
         res.append((x['label'], 'swap', amt, rr.stdout.strip()[-160:]))
     if any(t[1] == 'swap' for t in res): time.sleep(20)
     return res

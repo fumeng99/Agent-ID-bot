@@ -6,6 +6,9 @@
 数据：auto_buy.json 各日 buys（旧的普通付费/夜间买入；有 mint/contract 字段才能按项目归集）+ autofill.json 各日 buys（autofill 唯一入口）。
 手动「确认买入」的仓位不计入自动额度（用户当场确认，单独记账）。
 推送「▍额度」一律用本脚本 line 字段。旧字段 rule30_* 保留兼容（含义已是「普通付费已用」与「100U 日总额剩余」）。"""
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, sys, datetime
 D = os.path.dirname(os.path.abspath(__file__))
 DAILY_CAP, PROJECT_CAP = 100.0, 30.0
@@ -22,7 +25,7 @@ def today():
 
 
 def labels():
-    return [a['label'] for a in json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))]
+    return [a['label'] for a in json.load(open(_AH + '/baw/accounts/accounts.json'))]
 
 
 def _ab_each(b):

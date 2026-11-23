@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """推送「▍账户」行专用（2026-11-01 加：此前巡逻手工查余额出现「主 未查到」）。只读。
 输出 JSON：line 字段直接贴进推送；失败的号会重试一次再标「查询失败」，不会静默漏掉。"""
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rpcpool import batch
-A = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+A = json.load(open(_AH + '/baw/accounts/accounts.json'))
 U = '0x55d398326f99059fF775485246999027B3197955'
 def q():
     return batch([c for a in A for c in (('eth_getBalance', [a['bsc'], 'latest']),

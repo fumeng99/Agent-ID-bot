@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-import sys as _s; _s.path.append('$AIDBOT_HOME/pylib'); _s.path.insert(0, '$AIDBOT_DATA/vendor')
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
+import sys as _s; _s.path.append(_AH + '/pylib'); _s.path.insert(0, _AD + '/vendor')
 """监控公开 TG 频道（默认 聪哥 Agent ID Call @agentidcall），只输出上次以来的新帖。
 用法: python3 tgcall.py [频道名...]   状态存 tg/state.json。只读。"""
 import json, os, re, sys, html, urllib.request

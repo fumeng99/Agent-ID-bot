@@ -10,13 +10,16 @@
 5. 与 quote_watch pw 表、fairmint 共用去重：pw[a].alert60 已报过的不重复报。
 只读，不签名、不付款。由 quote_watch.py 末尾调用，alerts 并入巡逻单发。
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import sys, os, re, json, time
-sys.path.insert(0, '$AIDBOT_HOME/bsc-mint-skill'); sys.path.insert(0, '$AIDBOT_HOME/bsc-mint-skill/vendor')
+sys.path.insert(0, _AH + '/bsc-mint-skill'); sys.path.insert(0, _AH + '/bsc-mint-skill/vendor')
 import chain
 
-LM = '$AIDBOT_DATA'
-ST = '$AIDBOT_HOME/quote-racer/progress_universal_state.json'
-QW = '$AIDBOT_HOME/quote-racer/quote_watch_state.json'
+LM = _AD + ''
+ST = _AH + '/quote-racer/progress_universal_state.json'
+QW = _AH + '/quote-racer/quote_watch_state.json'
 ARG1 = '%064x' % 1
 N = lambda s: re.sub(r'[^a-z0-9]', '', s.split('(')[0].lower())
 

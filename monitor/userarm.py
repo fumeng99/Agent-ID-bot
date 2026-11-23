@@ -5,6 +5,9 @@
 交给 confirmed_buy.py（规则 B 源码验证、余额留 0.003、preview 干净才 execute、unknown 不重发）。每号每条只发一次。
 discoverd 每轮（约 60 秒）用 flock 拉起，本进程内 1.5 秒一读，最长跑 540 秒。
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import sys, os, json, time, subprocess
 D = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, D); os.chdir(D)
 from rpcpool import rpc
@@ -15,7 +18,7 @@ def sel(sig):  # 2026-11-10 AKITA 首发失败根因：codeutil.sel 不带 0x，
     x = _sel(sig); return x if x.startswith('0x') else '0x' + x
 
 CFG = 'userarm.json'; EV = 'discover_out/userarm_events.jsonl'
-ACCTS = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+ACCTS = json.load(open(_AH + '/baw/accounts/accounts.json'))
 
 
 def ev(**k):

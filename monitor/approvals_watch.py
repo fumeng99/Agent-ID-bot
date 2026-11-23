@@ -3,9 +3,12 @@
 和上次记下的比，新出现的授权提醒用户（无限额或币安标了风险 → 重要）。2026-11-06 起：放置超过一轮（约 10 分钟）的授权自动撤销（用户要求授权临时用、用完取消）。
 输出 JSON：{first, accounts:{label:{total, new:[...]}}, alerts:[...]}；第一次运行只记底，不提醒。
 状态：approvals_state.json（只存授权键，不含密钥）。"""
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import json, os, subprocess, sys, time
 D = os.path.dirname(os.path.abspath(__file__)); ST = os.path.join(D, 'approvals_state.json')
-ACC = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+ACC = json.load(open(_AH + '/baw/accounts/accounts.json'))
 UNL = 2 ** 200
 def key(a):
     if a.get('id') not in (None, ''): return str(a['id'])
@@ -22,7 +25,7 @@ def risky(a):
     return bad or a.get('noInteractive') is True
 def fetch(home):
     env = dict(os.environ, HOME=home, npm_config_cache='/tmp/npmcache')
-    r = subprocess.run(['bash', '$AIDBOT_HOME/baw/baw-wrapper.sh', 'approvals', 'list', '--limit', '100', '--json'], capture_output=True, text=True, timeout=40, env=env)
+    r = subprocess.run(['bash', _AH + '/baw/baw-wrapper.sh', 'approvals', 'list', '--limit', '100', '--json'], capture_output=True, text=True, timeout=40, env=env)
     j = json.loads(r.stdout)
     if not j.get('success'): raise RuntimeError(str(j.get('error'))[:80])
     return j['data'].get('list') or []
@@ -44,7 +47,7 @@ for a in ACC:
             if key(x) in set(prev):
                 env = dict(os.environ, HOME=a['home'], npm_config_cache='/tmp/npmcache')
                 try:
-                    r = subprocess.run(['bash', '$AIDBOT_HOME/baw/baw-wrapper.sh', 'approvals', 'revoke', '--binanceChainId', '56', '--tokenContract', x.get('tokenContract'), '--spender', x.get('spender'), '--type', x.get('type') or 'approve', '--json'], capture_output=True, text=True, timeout=90, env=env)
+                    r = subprocess.run(['bash', _AH + '/baw/baw-wrapper.sh', 'approvals', 'revoke', '--binanceChainId', '56', '--tokenContract', x.get('tokenContract'), '--spender', x.get('spender'), '--type', x.get('type') or 'approve', '--json'], capture_output=True, text=True, timeout=90, env=env)
                     j = json.loads(r.stdout); ok = j.get('success')
                     rev.append({'token': x.get('tokenSymbol'), 'spender': x.get('spender'), 'ok': ok, 'tx': (j.get('data') or {}).get('txHash'), 'err': None if ok else str(j.get('error'))[:80]})
                 except Exception as e:

@@ -6,7 +6,14 @@ if [ -z "${BINANCE_INSTANCE_ID:-}" ]; then echo '{"success":false,"error":"NO_IN
 if [ "${1:-}" = "contract-call" ] && [ "${2:-}" = "preview" ]; then
   _to=""; _prev=""; for _a in "$@"; do [ "$_prev" = "--to" ] && _to="$_a"; _prev="$_a"; done
   if [ -n "$_to" ]; then
-    _v=$(cd "${AIDBOT_HOME:-$HOME/.agent-id-bot}/launch-monitor" && timeout 90 python3 verify_source.py "$_to" 2>/dev/null | head -1)
+    # verify_source.py 可能在 launch-monitor / $AIDBOT_DATA / $AIDBOT_MONITOR 任一处；
+    # 都找不到时按未验证处理（失败即拒绝，不下调闸门）。
+    _vm=""
+    for _c in "${AIDBOT_HOME:-$HOME/.agent-id-bot}/launch-monitor" "${AIDBOT_DATA:-}" "${AIDBOT_MONITOR:-}"; do
+      [ -n "$_c" ] && [ -f "$_c/verify_source.py" ] && { _vm="$_c"; break; }
+    done
+    _v=""
+    [ -n "$_vm" ] && _v=$(cd "$_vm" && timeout 90 python3 verify_source.py "$_to" 2>/dev/null | head -1)
     if ! printf '%s' "$_v" | grep -q '"verified": *true'; then
       echo "{\"success\":false,\"error\":\"SOURCE_UNVERIFIED: $_to 源码未验证或查询失败，规则 B 禁止交互\"}"; exit 3
     fi

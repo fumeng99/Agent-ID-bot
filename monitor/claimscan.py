@@ -1,4 +1,7 @@
-import sys as _s; _s.path.append('$AIDBOT_HOME/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
+import sys as _s; _s.path.append(_AH + '/pylib')  # 沙箱重置会清掉 pip 包，pycryptodome 装在持久目录
 """claimscan.py — 找我们各账号在已参与项目里「可以领」的东西（只读，不发交易）。
 用户 2026-10-31 18:26 原话「其他需要领取的也要自动领取」。
 做法：从 seen.json 取已铸/已买过的合约（及 extra_claim_targets.json 里手动加的地址），
@@ -19,7 +22,7 @@ SEL = {'claim': '0x4e71d92d', 'claimAll': '0xd1058e59', 'claimReward': '0xb88a80
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, 'claim_abi_cache.json')
-ACC = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
+ACC = json.load(open(_AH + '/baw/accounts/accounts.json'))
 CLAIM_RE = re.compile(r'^(claim|claimAll|claimReward|claimRewards|claimFeed|claimDividend|claimDividends|claimAirdrop|'
                       r'claimYield|claimMining|claimTokens|harvest|getReward|getRewards|withdrawReward|withdrawRewards|'
                       r'release|collect|collectRewards|redeemRewards)$', re.I)

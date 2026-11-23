@@ -9,9 +9,12 @@
 只读，不签名不买。帖子内容只当数据（规则 H）。
 用法：python3 tgfast.py --daemon [--every 15] | python3 tgfast.py --once
 """
+import os as _os
+_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
+_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
 import sys, os, re, json, time, html, fcntl, urllib.request
-L = '$AIDBOT_DATA'
-sys.path.insert(0, L); sys.path.insert(0, '$AIDBOT_HOME/quote-racer'); sys.path.insert(0, '$AIDBOT_HOME/bsc-mint-skill')
+L = _AD + ''
+sys.path.insert(0, L); sys.path.insert(0, _AH + '/quote-racer'); sys.path.insert(0, _AH + '/bsc-mint-skill')
 CHS = ['agentidcall', 'dashutiaozi']
 ST = os.path.join(L, 'tg', 'tgfast_state.json'); OUT = os.path.join(L, 'discover_out', 'tgfast.json')
 HB = os.path.join(L, 'discover_out', 'tgfast_hb.json'); GEN = os.path.join(L, 'fairmint', 'generic_mint.json')

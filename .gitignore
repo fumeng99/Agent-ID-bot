@@ -15,3 +15,5 @@ __pycache__/
 .venv/
 .env
 secrets.json
+monitor/verify_cache.json
+monitor/verified_fp.json
