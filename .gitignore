@@ -17,3 +17,5 @@ __pycache__/
 secrets.json
 monitor/verify_cache.json
 monitor/verified_fp.json
+monitor/discover_out/
+unsellable.json
