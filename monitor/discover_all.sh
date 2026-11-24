@@ -13,27 +13,33 @@ run() { # name timeout dir cmd...
   ( s=$(date +%s); cd "$dir" && timeout "$t" "$@" > "$O/$n.json.run" 2> "$O/$n.err"; rc=$?; if [ -s "$O/$n.json.run" ]; then mv -f "$O/$n.json.run" "$O/$n.json"; else rm -f "$O/$n.json.run"; fi
     echo "$n exit=$rc ${t}s上限 用时=$(( $(date +%s)-s ))s" >> "$O/summary.txt" ) &
 }
-run chainscan 200 $D/chainscan env SCAN_BUDGET=60 python3 scan.py
-run regscan 110 $D/chainscan env REG_DEADLINE=95 python3 regscan.py  # 免费登记/领取（无 Transfer 事件，如 BossFreeRegister register()），候选同样并入 candidates.json
-run usdtscan 110 $D/chainscan env USDT_DEADLINE=95 python3 usdtscan.py  # 2026-11-03 FLY 漏发现后补：USDT 付款的 Agent ID 销售盘（BNB value=0、无 Transfer(from=0)），只出简报
-run sitescan 110 $D python3 sitescan.py
-run tg 90 $D python3 tg/tgcall.py agentidcall dashutiaozi
-run platforms 90 $D python3 platforms/platforms.py
-run watch_sites 110 $D python3 watch_sites.py
-run fairmint 110 $D/fairmint env FM_DEADLINE=100 python3 fairmint.py --minutes 30  # 含「已部署未开铸」预警与快到门槛 20 秒重读
-run heatscan 100 $D/fairmint env FM_DEADLINE=90 python3 heatscan.py  # 2026-11-01 学  第3/5/6层：QuickNode 400 块一段扫铸造事件，Agent ID 新项目 + 付费盘并入 found.json
+# 2026-11-24 分级调度：DISCOVER_TIER=fast 只跑链上发现（新盘响应快一倍），full 才跑 TG/内盘/官网等慢源。
+TIER=${DISCOVER_TIER:-full}
+maybe() {  # maybe <name> <timeout> <dir> <cmd...>：仅 full 档执行
+  if [ "$TIER" = "fast" ]; then echo "$1 skip(fast_tier)" >> "$O/summary.txt"; return 0; fi
+  run "$@"
+}
+run chainscan 200 $D/chainscan env SCAN_BUDGET=${SCAN_BUDGET:-60} python3 scan.py
+run regscan 110 $D/chainscan env REG_DEADLINE=${REG_DEADLINE:-95} python3 regscan.py  # 免费登记/领取（无 Transfer 事件，如 BossFreeRegister register()），候选同样并入 candidates.json
+run usdtscan 110 $D/chainscan env USDT_DEADLINE=${USDT_DEADLINE:-95} python3 usdtscan.py  # 2026-11-03 FLY 漏发现后补：USDT 付款的 Agent ID 销售盘（BNB value=0、无 Transfer(from=0)），只出简报
+maybe sitescan 110 $D python3 sitescan.py
+maybe tg 90 $D python3 tg/tgcall.py agentidcall dashutiaozi
+maybe platforms 90 $D python3 platforms/platforms.py
+maybe watch_sites 110 $D python3 watch_sites.py
+maybe fairmint 110 $D/fairmint env FM_DEADLINE=100 python3 fairmint.py --minutes 30  # 含「已部署未开铸」预警与快到门槛 20 秒重读
+maybe heatscan 100 $D/fairmint env FM_DEADLINE=90 python3 heatscan.py  # 2026-11-01 学  第3/5/6层：QuickNode 400 块一段扫铸造事件，Agent ID 新项目 + 付费盘并入 found.json
 run opencheck 90 $D python3 opencheck.py
-run approvals 240 $D python3 approvals_watch.py  # 授权巡检；2026-11-06 起放置超过一轮的授权自动撤销（用户：授权临时用、用完取消）
-run claimscan 110 $D python3 claimscan.py 80  # 可领取奖励（只读）
-run mixedfree 110 $D env MF_BUDGET=95 python3 mixedfree.py --scan  # 2026-11-02 用户「前面免费 后面付费的也不打」：混合盘免费份（数量 0 / claimFree 等）只读探测，按上次检查时间轮转；领取由巡逻 --from-out --mint 做
+maybe approvals 240 $D python3 approvals_watch.py  # 授权巡检；2026-11-06 起放置超过一轮的授权自动撤销（用户：授权临时用、用完取消）
+maybe claimscan 110 $D python3 claimscan.py 80  # 可领取奖励（只读）
+maybe mixedfree 110 $D env MF_BUDGET=95 python3 mixedfree.py --scan  # 2026-11-02 用户「前面免费 后面付费的也不打」：混合盘免费份（数量 0 / claimFree 等）只读探测，按上次检查时间轮转；领取由巡逻 --from-out --mint 做
 wait
 # 免费候选预检：依赖 chainscan 结果，所以放在 wait 之后
 ( s=$(date +%s); cd $D && timeout 100 python3 precheck.py > $O/precheck.json.run 2> $O/precheck.err; rc=$?; [ -s $O/precheck.json.run ] && mv -f $O/precheck.json.run $O/precheck.json; echo "precheck exit=$rc 100s上限 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
 # 2026-11-01 审计：开池进度高频检查（只读 eth_call，5 秒左右）：跨 30/60/70%、提前开池、速度/预计到 70% 分钟数、待预审列表
 # 2026-11-01 20:50：未验证但很热的免费盘（30 分钟 ≥50 钱包、value=0、规则 B 跳过）→ hotfree.json，巡逻放「⚠️ 需处理」问是否破例（每项目一次）
-( s=$(date +%s); cd $D && timeout 100 python3 hotfree_unverified.py > $O/hotfree.json.run 2> $O/hotfree.err; rc=$?; [ -s $O/hotfree.json.run ] && mv -f $O/hotfree.json.run $O/hotfree.json; echo "hotfree exit=$rc 100s上限 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
+[ "$TIER" = fast ] && echo "hotfree skip(fast_tier)" >> $O/summary.txt || ( s=$(date +%s); cd $D && timeout 100 python3 hotfree_unverified.py > $O/hotfree.json.run 2> $O/hotfree.err; rc=$?; [ -s $O/hotfree.json.run ] && mv -f $O/hotfree.json.run $O/hotfree.json; echo "hotfree exit=$rc 100s上限 用时=$(( $(date +%s)-s ))s" >> $O/summary.txt )
 # 2026-11-01 20:50：fastprogress 自带看门狗（32 秒输出上一轮安全结果）；last 只由它自己在成功时写。外层仍超时/空输出 → 用上一轮结果兜底并标 stale，不留空文件
-( s=$(date +%s); cd $D/fairmint && timeout 40 python3 fastprogress.py > $O/fastprogress.json 2> $O/fastprogress.err; rc=$?
+[ "$TIER" = fast ] && echo "fastprogress skip(fast_tier)" >> $O/summary.txt || ( s=$(date +%s); cd $D/fairmint && timeout 40 python3 fastprogress.py > $O/fastprogress.json 2> $O/fastprogress.err; rc=$?
   if ! python3 -c "import json,sys;json.load(open(sys.argv[1]))" $O/fastprogress.json 2>/dev/null; then
     python3 -c "import json,sys;o=json.load(open(sys.argv[1]));o.update(crossings=[],hot_alert=[],fastfill_started=[],urgent=False,stale=True,note='本轮输出为空，沿用上一轮结果');json.dump(o,open(sys.argv[2],'w'),ensure_ascii=False)" $D/fairmint/fastprogress_last.json $O/fastprogress.json 2>/dev/null || echo '{"stale":true,"rpc_degraded":true,"crossings":[],"hot":[]}' > $O/fastprogress.json
   fi
