@@ -649,3 +649,23 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 - 2026-11-10 20:1x PEPE AGENT（pepeagent.cc，0x96b2…0945）漏报修复：①discoverd 18:27 已见该合约，但 judge 只认 Jager Minted/OPEN_SELS/TRIO/代码内 REG，此盘（代币自带铸造、identity() 间接认 Agent ID）被静默丢弃 → 新增兜底：码里有已售计数选择器（totalMinted/paidMinted 等）就写 fairmint/generic_mint.json，progress_universal 与 quote_watch 优先读。②progress_universal 正则不认 lot（MAX_PAID_LOTS/MAX_LOTS/paidMinted/BASE_PRICE 已加），FLOKI 回归也改为可读，7/7。③quote_watch 只读状态文件末尾 400KB 且随机取 300 个，加 generic 优先；报价型识别加「mint 0xae3dfa28 + MAX_LOTS/TOKENS_PER_LOT」变体。
 - 2026-11-10 20:1x 用户「改」：①有铸造进度的合约不论有无交易对都进监控（discoverd 兜底 generic_mint.json → quote_watch/progress_universal）；②TG 快速通道 tg/tgfast.py 常驻（fmkick 保活），每 15 秒拉 agentidcall/dashutiaozi，新帖带网址/合约/「进度XX%」立刻扫官网（含 /api/mint-config）读进度，写 discover_out/tgfast.json，巡逻 0z 步优先报。回放 PEPE AGENT 帖 12 秒读出 10000/10000。
 - 2026-11-10 20:18 用户「为什么没说风险 额度 和链接 和分析」：付费盘任何提及（含跳过/不买）必须逐盘给 合约链接、进度、单价 BNB+U、每号上限与满额花费、合约余额、风险、官网、结论（PATROL 0y）。
+
+## 付费 mint 开池价闸（用户 2026-11-24 授权）
+
+> 起因：AGENTMINT（playagentcards）六号打满 0.1035 BNB，5,000 份 27 分钟售罄后开池价只有成本的 0.44 倍，全部卖出只回来 16.76 USDT（−69.6%）。
+
+**规则：开池价低于成本的 1.1 倍，不自动付费 mint。** 这类「押金/配池型」发行的结构性问题是：
+金库先切 20%、邀请再切 5%，池子里 BNB 与代币不成比例，开盘价必然低于成本；二级没有溢价时打完就是亏。
+
+实现：`monitor/prebuy_guard.py`，`autofill.py` 在派发任何付费买之前调用：
+
+| 情形 | 判定 |
+|---|---|
+| 池子已存在且有储备 | 池价 / 成本 ≥ 1.1 才买，否则跳过并写原因 |
+| 池子还没建（纯打新、无二级） | 默认拒绝（`PREBUY_ALLOW_PREOPEN=1` 可放开） |
+| 成本读不出来 | 拒绝（fail-closed，钱的事不猜） |
+
+阈值可用 `PREBUY_MIN_RATIO` 调整（默认 1.1）。命令行自查：`python3 monitor/prebuy_guard.py <mint合约>`。
+
+同日追加：`fast_sell.py` 单笔失败要能自适应降档（1/2、1/4、1/8），否则单笔限额币（如 AGENTMINT 1,000,000 枚/笔被拒）卖不出去。
+手动确认买入的仓位也要写进 positions（`source: manual`），才能被止盈止损规则覆盖。

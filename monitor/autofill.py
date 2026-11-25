@@ -256,6 +256,18 @@ for a, c in sorted(cands.items(), key=lambda kv: -kv[1]['open_pct']):
     full = [l for l in LABELS if l not in accs]
     if full: out['remind'].append(f"{c['name']}：{'/'.join(full)} 已到每号每项目 30U 或当日 100U 上限，未买")
     if not accs: g['result'] = '额度用完'; continue
+    # ⑧.5 开池价闸（2026-11-24 用户授权）：池价 < 1.1 x 成本就拒绝自动付费 mint
+    #   背景：AGENTMINT 开池价 0.44x 成本，六号打满后卖出只剩 30%。结构性亏损按规则不该自动买。
+    try:
+        import prebuy_guard as _PG
+        _ok, _why = _PG.guard(a, tok)
+        g.setdefault('price_gate', []).append({'token': a, 'allow': _ok, 'why': _why})
+        if not _ok:
+            if skip(c, '开池价闸：' + _why): continue
+            continue
+    except Exception as _e:
+        out.setdefault('remind', []).append(f"{c['name']}：价格闸异常 {str(_e)[:60]}，本轮不买")
+        continue
     # ⑨ 执行（每号 preview 干净才 execute，执行器内实现；dry 只预演）
     if ex == 'generic':
         cmd = ['python3', f'{D}/generic_buy.py', a, '--budget', json.dumps({l: bud[l] for l in accs}, ensure_ascii=False)] + (['--dry'] if DRY else [])
