@@ -1,24 +1,21 @@
-import os as _os
-_AH = _os.environ.get("AIDBOT_HOME") or _os.path.expanduser("~/.agent-id-bot")
-_AD = _os.environ.get("AIDBOT_DATA") or _os.path.join(_AH, "data")
-# 一键并发卖出：五个号同时下市价单把某币卖成 USDT。只在用户明确说卖（或已授权的止损规则触发）时运行。
-# usage: python3 fast_sell.py <token> [pct=100] [--slip 8] [--gas HIGH] [--dry] [labels...]
+# 一键并发卖出：各号同时下市价单把某币卖成 USDT。只在用户明确说卖（或已授权的止损规则触发）时运行。
+# usage: python3 fast_sell.py <token> [pct=100] [--slip 8] [--gas HIGH] [--chunk N] [--dry] [labels...]
+# 2026-11-24：加自适应分片。AGENTMINT 实测单笔 1,000,000 枚被服务端以 slippage 不足拒单，
+#   旧逻辑每号只下一笔 -> 永远卖不掉。现在：单笔失败就按 1/2、1/4、1/8 降档，直到余额清零。
 import sys, os, json, subprocess, time
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rpcpool import batch
-U = '0x55d398326f99059fF775485246999027B3197955'; B = _AH + '/baw/node_modules/.bin/baw'
-A = json.load(open(_AH + '/baw/accounts/accounts.json'))
+U = '0x55d398326f99059fF775485246999027B3197955'; B = '$AIDBOT_HOME/baw/node_modules/.bin/baw'
+A = json.load(open('$AIDBOT_HOME/baw/accounts/accounts.json'))
 args = sys.argv[1:]; DRY = '--dry' in args
 def opt(k, d):
     return args[args.index(k) + 1] if k in args else d
 SLIP = str(min(float(opt('--slip', '8')), 15))  # D：滑点上限 15%
 GAS = opt('--gas', 'HIGH')
-PX = float(opt('--px', '0') or 0)  # 2026-11-04：possell 估算价；quote 实价 < 估算 50% 不下单（BNBbaby 价格源错误误卖）
-pos = [x for i, x in enumerate(args) if not x.startswith('--') and (i == 0 or args[i-1] not in ('--slip', '--gas', '--px'))]
-# 2026-11-06 修卡单根因：账号标签 001/002 是纯数字，旧逻辑把它当成百分比参数丢掉 → only 为空 → 卖全部六号。
-# 结果是给 001 卖时六号一起下单，多个进程抢同一余额（30003001 余额不足）、触发限流（15002）、订单 FAILED。
-# 现在：只有第 2 个位置参数可作百分比；标签一律按 accounts.json 的 label 精确匹配。
+CHUNK = int(float(opt('--chunk', '0') or 0))  # 0 = 用余额一次试，失败自动降档
+PX = float(opt('--px', '0') or 0)
+pos = [x for i, x in enumerate(args) if not x.startswith('--') and (i == 0 or args[i-1] not in ('--slip', '--gas', '--px', '--chunk'))]
 LABELS = {a['label'] for a in A}
 T = pos[0]
 PCT = float(pos[1]) if len(pos) > 1 and pos[1] not in LABELS and pos[1].replace('.', '').isdigit() else 100.0
@@ -29,61 +26,102 @@ acc = [a for a in A if not only or a['label'] in only]
 t0 = time.time()
 dec = int(batch([('eth_call', [{'to': T, 'data': '0x313ce567'}, 'latest'])])[0], 16)
 bals = batch([('eth_call', [{'to': T, 'data': '0x70a08231' + a['bsc'][2:].lower().rjust(64, '0')}, 'latest']) for a in acc])
-def one(a, b):
-    raw = int(b, 16)
-    sell_wei = raw * int(round(PCT * 100)) // 10000 if PCT < 100 else raw
-    if sell_wei <= 0: return a['label'], 'no_balance'
-    # 2026-11-23：按 decimals 精确格式化，不再用 %.6f 截断（18 位小数的币会被砍掉有效位）
-    whole, frac = divmod(sell_wei, 10**dec)
-    qty = str(whole) if frac == 0 else ('%d.%s' % (whole, str(frac).rjust(dec, '0').rstrip('0')))
-    env = dict(os.environ, HOME=a['home'], npm_config_cache='/tmp/npmcache')
-    if not DRY:  # 2026-11-01 D：每号先 quote 预演，失败不下单
-        # 2026-11-02：quote 是只读报价。网络/超时/限流类失败（非业务拒绝）重试 3 次、退避 1/2 秒；仍失败标 quote_unknown（possell 不计入放弃次数）
-        qerr = None
-        for _k in range(3):
-            try:
-                qr = subprocess.run([B, 'market-order', 'quote', '--binanceChainId', '56', '--fromTokenQty', qty, '--fromToken', T, '--toToken', U, '--slippage', SLIP, '--json'], env=env, capture_output=True, text=True, timeout=60)
-                txt = qr.stdout + qr.stderr
-            except subprocess.TimeoutExpired: txt = 'timeout'
-            try:
-                if json.loads(qr.stdout).get('data'): qerr = None; break
-            except Exception: pass
-            qerr = txt[:160]
-            if not any(k in txt.lower() for k in ('timeout', 'timed out', 'econn', 'network', '429', 'too many', '502', '503', '504', 'socket', 'fetch failed')): break  # 业务拒绝（如 No liquidity）不重试
-            time.sleep(1 + _k)
-        if qerr is not None:
-            net = any(k in qerr.lower() for k in ('timeout', 'timed out', 'econn', 'network', '429', 'too many', '502', '503', '504', 'socket', 'fetch failed'))
-            return a['label'], {'qty': qty, 'error': ('quote_unknown 报价读取失败（已重试 3 次），未下单：' if net else 'quote 预演失败，未下单：') + qerr}
-        if PX:
-            try:
-                got = float(json.loads(qr.stdout)['data'].get('toCoinAmount') or 0); qpx = got / float(qty)
-                if qpx < PX * 0.5: return a['label'], {'qty': qty, 'error': f'quote_mismatch 报价 {got:.4g}U，仅为估算的 {qpx / PX * 100:.1f}%，未下单'}
-            except Exception: pass
+
+
+def fmt(wei):
+    whole, frac = divmod(int(wei), 10**dec)
+    return str(whole) if frac == 0 else ('%d.%s' % (whole, str(frac).rjust(dec, '0').rstrip('0')))
+
+
+def bal_of(addr):
+    r = batch([('eth_call', [{'to': T, 'data': '0x70a08231' + addr[2:].lower().rjust(64, '0')}, 'latest'])])[0]
+    return int(r, 16) if r else 0
+
+
+def quote_ok(env, qty):
+    qr = subprocess.run([B, 'market-order', 'quote', '--binanceChainId', '56', '--fromTokenQty', qty, '--fromToken', T, '--toToken', U, '--slippage', SLIP, '--json'], env=env, capture_output=True, text=True, timeout=60)
+    try:
+        d = json.loads(qr.stdout).get('data') or {}
+        return bool(d), d
+    except Exception:
+        return False, {'raw': (qr.stdout + qr.stderr)[:160]}
+
+
+def single(env, qty):
+    """下一笔。返回 (ok, info)。"""
+    ok_q, qd = quote_ok(env, qty) if not DRY else (True, {})
+    if not ok_q:
+        return False, {'qty': qty, 'error': 'quote 预演失败：' + json.dumps(qd, ensure_ascii=False)[:140], 'kind': 'quote'}
+    if PX and qd:
+        try:
+            got = float(qd.get('toCoinAmount') or 0); qpx = got / float(qty)
+            if qpx < PX * 0.5:
+                return False, {'qty': qty, 'error': f'quote_mismatch 报价 {got:.4g}U 仅为估算 {qpx / PX * 100:.1f}%', 'kind': 'px'}
+        except Exception: pass
     cmd = [B, 'market-order', 'quote' if DRY else 'swap', '--binanceChainId', '56', '--fromTokenQty', qty, '--fromToken', T, '--toToken', U, '--slippage', SLIP, '--json']
     if not DRY: cmd[-1:-1] = ['--gasLevel', GAS]
     r = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=150)
     try:
         d = json.loads(r.stdout)['data']
-        if DRY: return a['label'], {'qty': qty, 'quote': str(d)[:160]}
-        # 2026-11-01 19:50 修：拿到 orderId 不等于成交（BNBHolder 卖一半那笔实际 FAILED 却被记成已卖）。轮询订单状态，FINISHED 才算卖出
-        oid = d['orderId']
-        for _ in range(15):
-            time.sleep(4)
-            try:
-                L = json.loads(subprocess.run([B, 'market-order', 'list', '--json'], env=env, capture_output=True, text=True, timeout=60).stdout)['data']
-                L = L.get('list', L) if isinstance(L, dict) else L
-                o = next((x for x in L if x.get('orderId') == oid), None)
-            except Exception: o = None
-            if o and o.get('status') == 'FINISHED': return a['label'], {'qty': qty, 'orderId': oid, 'got_u': o.get('toTokenActualQty'), 'tx': o.get('txHash')}
-            if o and o.get('status') in ('FAILED', 'CANCELLED', 'EXPIRED'): return a['label'], {'qty': qty, 'error': f'订单 {oid} {o["status"]}，未成交'}
-        return a['label'], {'qty': qty, 'error': f'订单 {oid} 60 秒未确认成交，不重发，下轮按余额重判'}
     except Exception:
-        return a['label'], {'qty': qty, 'error': (r.stdout + r.stderr)[:200]}
+        txt = (r.stdout + r.stderr)
+        kind = 'size' if ('slippage is not enough' in txt.lower() or '30003001' in txt) else 'other'
+        return False, {'qty': qty, 'error': txt[:200], 'kind': kind}
+    if DRY: return True, {'qty': qty, 'quote': str(d)[:160]}
+    oid = d['orderId']
+    for _ in range(15):
+        time.sleep(4)
+        try:
+            L2 = json.loads(subprocess.run([B, 'market-order', 'list', '--json'], env=env, capture_output=True, text=True, timeout=60).stdout)['data']
+            L2 = L2.get('list', L2) if isinstance(L2, dict) else L2
+            o = next((x for x in L2 if x.get('orderId') == oid), None)
+        except Exception:
+            o = None
+        if o and o.get('status') == 'FINISHED':
+            return True, {'qty': qty, 'orderId': oid, 'got_u': o.get('toTokenActualQty'), 'tx': o.get('txHash')}
+        if o and o.get('status') in ('FAILED', 'CANCELLED', 'EXPIRED'):
+            return False, {'qty': qty, 'orderId': oid, 'error': f"订单 {oid} {o['status']}", 'kind': 'order'}
+    return False, {'qty': qty, 'orderId': oid, 'error': f'订单 {oid} 60 秒未确认，不重发', 'kind': 'order'}
+
+
+def one(a, b):
+    """按余额循环卖；单笔失败自动降档（1/2、1/4、1/8…），直到清零或降无可降。"""
+    env = dict(os.environ, HOME=a['home'], npm_config_cache='/tmp/npmcache')
+    raw = int(b, 16) if b else 0
+    target = raw * PCT / 100 if PCT < 100 else raw
+    left = int(target)
+    if left <= 0: return a['label'], 'no_balance'
+    chunk = CHUNK * 10**dec if CHUNK else left
+    chunk = min(chunk, left)
+    got_u = 0.0; orders = []; fails = 0
+    while left > 0 and fails < 8:
+        ok, info = single(env, fmt(chunk))
+        if ok:
+            orders.append(info)
+            got_u += float(info.get('got_u') or 0)
+            time.sleep(6)
+            nb = bal_of(a['bsc'])
+            sold = max(0, left - int(nb * PCT / 100 if PCT < 100 else nb))
+            left = int(nb * PCT / 100 if PCT < 100 else nb)
+            if left <= 0: break
+            chunk = min(chunk, left)
+            continue
+        orders.append(info)
+        if info.get('kind') == 'size' and chunk > 1:
+            chunk = max(1, chunk // 2)   # 单笔太大 -> 降档重试
+            continue
+        fails += 1
+        time.sleep(4)
+    if orders and any('orderId' in o or 'quote' in o for o in orders):
+        out = orders[-1] if len(orders) == 1 else {'orders': orders, 'got_u_total': round(got_u, 6), 'left': left}
+        return a['label'], out
+    return a['label'], (orders[-1] if orders else {'error': '未下单'})
+
+
 with ThreadPoolExecutor(len(acc)) as ex:
     res = dict(ex.map(lambda ab: one(*ab), zip(acc, bals)))
 print(json.dumps({'token': T, 'pct': PCT, 'dry': DRY, 'secs': round(time.time() - t0, 1), 'orders': res}, ensure_ascii=False))
-# 2026-11-01 优化：全部卖出后自动核对余额，清零的就从 auto_buy.json 持仓里移除并停掉该币的 price_trigger，避免保本机制对空仓继续触发
-if not DRY and PCT >= 100 and all('orderId' in v or v == 'no_balance' for v in res.values()):
+if not DRY and PCT >= 100 and all(isinstance(v, (dict, str)) and (v == 'no_balance' or 'orderId' in v or 'orders' in v) for v in res.values()):
     time.sleep(8)
     left = batch([('eth_call', [{'to': T, 'data': '0x70a08231' + a['bsc'][2:].lower().rjust(64, '0')}, 'latest']) for a in acc], tolerant=True)
     if all(x is not None and int(x, 16) == 0 for x in left) and not only:
