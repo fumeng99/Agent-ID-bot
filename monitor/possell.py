@@ -26,7 +26,7 @@ args = sys.argv[1:]; DRY = '--dry' in args
 def opt(k, d): return float(args[args.index(k) + 1]) if k in args else d
 LOOP, EVERY = opt('--loop', 0), opt('--every', 20)
 R = dict(backX=2, steps=[(10, 30), (20, 50)], crash=0.35, crashAfterBack=0.50, moonPct=20, moonNotify=[50, 100], notifyX=[5, 10, 20],
-         freeDrop=0.40, freeWaitSec=180, minU=0.3, smallU=3, smallMaxFail=6, earlyX=1.5, earlyWin=600, impact=0.15, fastWin=1800)
+         freeDrop=0.40, freeWaitSec=180, minU=0.3, smallU=3, smallMaxFail=6, earlyX=1.5, earlyWin=600, impact=0.15, fastWin=1800, costCrash=0.40)
 
 
 def cst_hour(): return time.gmtime(time.time() + 8 * 3600).tm_hour
@@ -228,7 +228,11 @@ def step(st, out):
                     if x >= n and n not in sa.setdefault('nx', []): sa['nx'].append(n); out['notify'].append(f"{P['name']}｜{l}｜到 {n} 倍（现价 {px:.3g}U）｜{q['url']}")
                 dd = 1 - px / s['peak'] if s['peak'] else 0
                 sa['xmax'] = max(sa.get('xmax', 0), round(x, 3))
-                if sa['stage'] == 0:
+                # 2026-11-24：成本止损。回落止损在「开盘即低于成本」时恒不触发（峰价就是开盘价，dd≈0），
+                # AGENTMINT 开池 0.44 倍成本、六号 0.1035 BNB 一直没人卖，就是踩这个洞。
+                if sa['stage'] == 0 and x <= (1 - R.get('costCrash', 0.40)) and not sa.get('coststop'):
+                    act = ('跌破买入价 40%% 全卖（结构性破发）', 100)
+                elif sa['stage'] == 0:
                     if x >= R['backX']: act = ('回本卖一半', 50)
                     elif sa['xmax'] >= R['earlyX'] and x <= 1.0 and time.time() - opened_at <= R['earlyWin']: act = ('回本卖一半（开池初期冲高 1.5 倍后跌回成本）', 50)
                     elif dd >= R['crash']: act = ('回本前从高点回落 35% 全卖', 100)
@@ -270,6 +274,7 @@ def step(st, out):
                     elif kind.startswith('10 倍'): sa['s10'] = True
                     elif kind.startswith('20 倍'): sa['s20'] = True
                     elif '长抱' in kind: sa['moon'] = True
+                    elif kind.startswith('跌破买入价'): sa['coststop'] = True; sa['done'] = True
                     else: sa['done'] = True
                     out['sold'].append({'name': P['name'], 'token': t, 'acc': l, 'why': kind, 'pct': pct, 'value_u': round(v * pct / 100, 2), 'order': r.get('orderId') if isinstance(r, dict) else r, 'url': q['url']})
                 elif isinstance(r, dict) and 'quote_mismatch' in str(r.get('error', '')):

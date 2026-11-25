@@ -669,3 +669,33 @@ AID（BIBIAI，token 0xa691…67fe）虽是手动打满，也按自动仓位卖�
 
 同日追加：`fast_sell.py` 单笔失败要能自适应降档（1/2、1/4、1/8），否则单笔限额币（如 AGENTMINT 1,000,000 枚/笔被拒）卖不出去。
 手动确认买入的仓位也要写进 positions（`source: manual`），才能被止盈止损规则覆盖。
+
+## 卖出链路三处加固（用户 2026-11-24 授权，实盘复盘）
+
+### 1. `fast_sell.py` 自适应分片
+
+AGENTMINT 单笔 1,000,000 枚被服务端以 `slippage is not enough` 拒单（auto=20% 也不行），
+旧逻辑每号只下一笔 → 这类单笔限额币永远卖不掉。现在：失败按 **1/2、1/4、1/8** 降档重试，
+成功一笔就重新读链上余额、按剩余额度继续，直到清零或降无可降（最多 8 次失败）。
+`--chunk N` 可显式指定首笔份数。
+
+### 2. 手动确认买入的仓位必须登记（`monitor/positions.py`）
+
+`possell.py` 只认 `auto_buy.json` 的 `positions`。手动确认买入（例如口头说「全部打满」）
+不登记 = 止盈止损规则完全不认识它——AGENTMINT 开池 0.44 倍成本却无人自动卖，就是这么来的。
+
+```sh
+python3 monitor/positions.py add --project AGENTMINT --token 0x.. \
+      --labels 主号,小黑 --cost-u 9.19 --qty 1000000 [--mint 0x..] [--note 备注]
+python3 monitor/positions.py list
+```
+
+写入字段：`manual: true`、`cost_u_each`、`qty_each`、`opened: false`、`via: manual/positions.py`。
+
+### 3. 成本止损（结构性破发）
+
+原「从高点回落 35% 全卖」在**开盘即低于成本**时恒不触发：峰价就是开盘价，回撤 ≈ 0。
+新增 `costCrash = 0.40`：`现价 ≤ 买入价 × 0.60` 且仍处未回本阶段 → **全卖**，与夜间时段无关
+（手动仓位本来就是全天自动卖，`possell.py` 里那段 `if False:` 是 2026-11-01 已放开的开关）。
+
+触发后记 `coststop=True; done=True`，不会重复卖。
