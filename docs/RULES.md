@@ -699,3 +699,20 @@ python3 monitor/positions.py list
 （手动仓位本来就是全天自动卖，`possell.py` 里那段 `if False:` 是 2026-11-01 已放开的开关）。
 
 触发后记 `coststop=True; done=True`，不会重复卖。
+
+### 4. 手动买入自动登记（`monitor/auto_positions.py`，2026-11-24）
+
+用户要求「我说的也要自动覆盖」：不依赖人工再敲 `positions.py`。
+
+扫描各号 `baw wallet tx-history`，凡是「付出 BNB/USDT、收到某个 ERC20」的交易，按实际均价折算：
+
+```
+cost_u_each = 该号累计付出 USD / 累计收到代币数量 × 当前持仓数量
+写入 manual=True, via='auto-detect', opened=True
+```
+
+- 持仓为 0 的不登记（已卖完）；已登记过的 token 不重复写
+- 调度：每日维护跑一次 + 巡逻 **full 档**（每 30 分钟）跑一次
+- 自查：`python3 monitor/auto_positions.py --dry`（只打印不写）
+
+实测（主号）：识别 `0.018 BNB → 1,000,000 AGENTMINT`，因持仓已清零而未登记（符合预期）。
